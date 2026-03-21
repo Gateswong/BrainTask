@@ -6,7 +6,7 @@ local BT = BrainTask
 BT.UI.GlobalSettings = {}
 local GS = BT.UI.GlobalSettings
 
-local WIN_W, WIN_H = 340, 280
+local WIN_W, WIN_H = 340, 348
 
 -- ── 主框架 ────────────────────────────────────────────────────────────────
 
@@ -31,7 +31,7 @@ BT.MakeDraggable(frame, titleBar)
 
 local titleFS = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 titleFS:SetPoint("LEFT", titleBar, "LEFT", 12, 0)
-titleFS:SetText("|cff55aaff全局设置|r")
+titleFS:SetText("|cff55aaff" .. BT.L.TITLE_GLOBAL_SET .. "|r")
 
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(20, 20)
@@ -47,13 +47,13 @@ closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
 
 local pollLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 pollLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -46)
-pollLabel:SetText("自动追踪轮询间隔")
+pollLabel:SetText(BT.L.POLL_LABEL)
 pollLabel:SetTextColor(unpack(BT.COLORS.textNormal))
 
 local pollDesc = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 pollDesc:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -66)
 pollDesc:SetTextColor(unpack(BT.COLORS.textMuted))
-pollDesc:SetText("Quest 和副本 Boss 的自动完成检测频率（秒，最小 1）")
+pollDesc:SetText(BT.L.POLL_DESC)
 
 local pollBox = CreateFrame("EditBox", nil, frame, "BackdropTemplate")
 pollBox:SetSize(60, 26)
@@ -68,7 +68,7 @@ pollBox:SetMaxLetters(4)
 pollBox:SetNumeric(true)
 pollBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-local pollApplyBtn = BT.CreateButton(frame, "应用", 70, 26)
+local pollApplyBtn = BT.CreateButton(frame, BT.L.BTN_APPLY, 70, 26)
 pollApplyBtn:SetPoint("LEFT", pollBox, "RIGHT", 8, 0)
 
 local pollCurFS = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -81,7 +81,7 @@ local function ApplyPollInterval()
     pollBox:ClearFocus()
     BrainTaskDB.pollInterval = val
     BT.StartPollTicker(val)
-    pollCurFS:SetText("已应用：" .. val .. " 秒")
+    pollCurFS:SetText(string.format(BT.L.POLL_APPLIED_FMT, val))
 end
 
 pollApplyBtn:SetScript("OnClick", ApplyPollInterval)
@@ -111,7 +111,7 @@ end
 
 local dashLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 dashLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -132)
-dashLabel:SetText("Dashboard 缩放")
+dashLabel:SetText(BT.L.DASH_SCALE)
 dashLabel:SetTextColor(unpack(BT.COLORS.textNormal))
 
 local dashSlider = MakeSlider(frame, -154)
@@ -156,7 +156,7 @@ end)
 
 local fwLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 fwLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -192)
-fwLabel:SetText("浮动窗口缩放")
+fwLabel:SetText(BT.L.FW_SCALE)
 fwLabel:SetTextColor(unpack(BT.COLORS.textNormal))
 
 local fwSlider = MakeSlider(frame, -214)
@@ -197,13 +197,117 @@ fwBox:SetScript("OnEnterPressed", function(self)
     ApplyFWScale(tonumber(self:GetText()) or 1.0)
 end)
 
+-- ── 界面语言 ──────────────────────────────────────────────────────────────
+
+local langSectionLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+langSectionLabel:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -252)
+langSectionLabel:SetText(BT.L.LANG_LABEL)
+langSectionLabel:SetTextColor(unpack(BT.COLORS.textNormal))
+
+-- 当前选中语言的显示名称
+local function GetLangDisplayName(id)
+    for _, opt in ipairs(BT.LANG_OPTIONS) do
+        if opt.id == id then
+            return opt.id == "auto" and BT.L.LANG_AUTO or opt.name
+        end
+    end
+    return BT.L.LANG_AUTO
+end
+
+-- 语言选择按钮（显示当前语言）
+local langDropBtn = BT.CreateButton(frame, BT.L.LANG_AUTO, 220, 26)
+langDropBtn:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -272)
+
+-- 下拉列表
+local langDropList = CreateFrame("Frame", nil, frame)
+langDropList:SetSize(220, 1)
+langDropList:SetPoint("BOTTOMLEFT", langDropBtn, "TOPLEFT", 0, 2)
+langDropList:SetFrameStrata("FULLSCREEN_DIALOG")
+langDropList:EnableMouse(true)
+local _ldBorder = langDropList:CreateTexture(nil, "BACKGROUND", nil, 0)
+_ldBorder:SetAllPoints()
+_ldBorder:SetColorTexture(0.22, 0.22, 0.32, 1)
+local _ldBg = langDropList:CreateTexture(nil, "BACKGROUND", nil, 1)
+_ldBg:SetPoint("TOPLEFT",     langDropList, "TOPLEFT",     1, -1)
+_ldBg:SetPoint("BOTTOMRIGHT", langDropList, "BOTTOMRIGHT", -1,  1)
+_ldBg:SetColorTexture(0.10, 0.10, 0.14, 1)
+langDropList:Hide()
+
+local function BuildLangDropList()
+    for _, child in ipairs({ langDropList:GetChildren() }) do
+        child:Hide()
+    end
+    local listH = 0
+    for _, opt in ipairs(BT.LANG_OPTIONS) do
+        local displayName = (opt.id == "auto") and BT.L.LANG_AUTO or opt.name
+        local item = CreateFrame("Button", nil, langDropList)
+        item:SetHeight(22)
+        item:SetPoint("TOPLEFT",  langDropList, "TOPLEFT",  2, -listH)
+        item:SetPoint("TOPRIGHT", langDropList, "TOPRIGHT", -2, -listH)
+        local itemFS = item:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        itemFS:SetAllPoints()
+        itemFS:SetText(displayName)
+        itemFS:SetJustifyH("LEFT")
+        itemFS:SetTextColor(0.9, 0.9, 0.9)
+        local iBg = item:CreateTexture(nil, "BACKGROUND")
+        iBg:SetAllPoints()
+        iBg:SetColorTexture(0, 0, 0, 0)
+        item:SetScript("OnEnter", function() iBg:SetColorTexture(1, 1, 1, 0.06) end)
+        item:SetScript("OnLeave", function() iBg:SetColorTexture(0, 0, 0, 0) end)
+        local optID = opt.id
+        item:SetScript("OnClick", function()
+            langDropList:Hide()
+            if BrainTaskDB then
+                BrainTaskDB.language = optID
+            end
+            ReloadUI()
+        end)
+        item:Show()
+        listH = listH + 22
+    end
+    langDropList:SetHeight(math.max(listH, 10))
+end
+
+langDropBtn:SetScript("OnClick", function()
+    if langDropList:IsVisible() then
+        langDropList:Hide()
+    else
+        BuildLangDropList()
+        langDropList:Show()
+    end
+end)
+
+-- 关闭下拉框（点击其他地方）
+frame:SetScript("OnMouseDown", function(self)
+    self:Raise()
+    langDropList:Hide()
+end)
+
+local langHint = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+langHint:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -304)
+langHint:SetText(BT.L.LANG_RELOAD_HINT)
+langHint:SetTextColor(unpack(BT.COLORS.textMuted))
+
+-- ── 本地化刷新 ────────────────────────────────────────────────────────────
+
+BT.Locale.Register(function()
+    titleFS:SetText("|cff55aaff" .. BT.L.TITLE_GLOBAL_SET .. "|r")
+    pollLabel:SetText(BT.L.POLL_LABEL)
+    pollDesc:SetText(BT.L.POLL_DESC)
+    pollApplyBtn.label:SetText(BT.L.BTN_APPLY)
+    dashLabel:SetText(BT.L.DASH_SCALE)
+    fwLabel:SetText(BT.L.FW_SCALE)
+    langSectionLabel:SetText(BT.L.LANG_LABEL)
+    langHint:SetText(BT.L.LANG_RELOAD_HINT)
+end)
+
 -- ── 公共接口 ──────────────────────────────────────────────────────────────
 
 function GS.Open()
     local db = BrainTaskDB
     local cur = db and db.pollInterval or 15
     pollBox:SetText(tostring(cur))
-    pollCurFS:SetText("当前：" .. cur .. " 秒")
+    pollCurFS:SetText(string.format(BT.L.POLL_CURRENT_FMT, cur))
 
     local ds = db and db.dashboardScale or 1.0
     dashSlider:SetValue(ds)
@@ -213,6 +317,10 @@ function GS.Open()
     fwSlider:SetValue(fs)
     fwBox:SetText(string.format("%.2f", fs))
 
+    local lang = db and db.language or "auto"
+    langDropBtn.label:SetText(GetLangDisplayName(lang))
+
+    langDropList:Hide()
     frame:Show()
 end
 

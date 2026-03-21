@@ -34,7 +34,7 @@ BT.MakeDraggable(frame, titleBar)
 
 local titleFS = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 titleFS:SetPoint("LEFT", titleBar, "LEFT", 12, 0)
-titleFS:SetText("|cff55aaff角色管理|r")
+titleFS:SetText("|cff55aaff" .. BT.L.TITLE_CHAR_MGMT .. "|r")
 
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(20, 20)
@@ -50,7 +50,7 @@ closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
 local hintFS = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 hintFS:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -36)
 hintFS:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -36)
-hintFS:SetText("拖拽行排序 · 点击眼睛图标切换显示")
+hintFS:SetText(BT.L.CHAR_HINT)
 hintFS:SetTextColor(unpack(BT.COLORS.textMuted))
 hintFS:SetJustifyH("LEFT")
 
@@ -168,7 +168,7 @@ function SC.Refresh()
             -- 角色名 + 服务器
             local nameStr = (info.name or key)
                 .. " |cff505060" .. (info.realm or "") .. "|r"
-                .. (key == ck and " |cff55aaff(当前)|r" or "")
+                .. (key == ck and " |cff55aaff" .. BT.L.CURRENT_CHAR .. "|r" or "")
             local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             nameFS:SetPoint("LEFT",  row, "LEFT",  10, 0)
             nameFS:SetPoint("RIGHT", row, "RIGHT", -30, 0)
@@ -240,6 +240,13 @@ function SC.Refresh()
 
     content:SetHeight(math.max(y, 10))
 end
+
+-- ── 本地化刷新 ────────────────────────────────────────────────────────────
+
+BT.Locale.Register(function()
+    titleFS:SetText("|cff55aaff" .. BT.L.TITLE_CHAR_MGMT .. "|r")
+    hintFS:SetText(BT.L.CHAR_HINT)
+end)
 
 -- ── 公共接口 ──────────────────────────────────────────────────────────────
 

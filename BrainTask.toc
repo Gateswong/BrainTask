@@ -5,6 +5,7 @@
 ## Version: 1.0.0
 ## SavedVariables: BrainTaskDB
 
+Locale.lua
 Core.lua
 Data.lua
 Tracking.lua

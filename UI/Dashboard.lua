@@ -76,25 +76,25 @@ botBar:SetBackdrop(BT.BACKDROP)
 botBar:SetBackdropColor(unpack(BT.COLORS.header))
 botBar:SetBackdropBorderColor(unpack(BT.COLORS.border))
 
-local addWarbandBtn = BT.CreateButton(botBar, "+ 添加战团事项", 130, 26)
+local addWarbandBtn = BT.CreateButton(botBar, BT.L.BTN_ADD_WARBAND, 130, 26)
 addWarbandBtn:SetPoint("LEFT", botBar, "LEFT", 10, 0)
 
-local addCharBtn = BT.CreateButton(botBar, "+ 添加角色事项", 130, 26)
+local addCharBtn = BT.CreateButton(botBar, BT.L.BTN_ADD_CHAR, 130, 26)
 addCharBtn:SetPoint("LEFT", addWarbandBtn, "RIGHT", 8, 0)
 
-local globalSettingsBtn = BT.CreateButton(botBar, "设置", 70, 26)
+local globalSettingsBtn = BT.CreateButton(botBar, BT.L.BTN_SETTINGS, 70, 26)
 globalSettingsBtn:SetPoint("RIGHT", botBar, "RIGHT", -10, 0)
 globalSettingsBtn:SetScript("OnClick", function()
     if BT.UI.GlobalSettings then BT.UI.GlobalSettings.Open() end
 end)
 
-local settingsBtn = BT.CreateButton(botBar, "分类管理", 100, 26)
+local settingsBtn = BT.CreateButton(botBar, BT.L.BTN_CATEGORY_MGMT, 100, 26)
 settingsBtn:SetPoint("RIGHT", globalSettingsBtn, "LEFT", -8, 0)
 settingsBtn:SetScript("OnClick", function()
     if BT.UI.Settings then BT.UI.Settings.Open() end
 end)
 
-local sortCharsBtn = BT.CreateButton(botBar, "角色管理", 90, 26)
+local sortCharsBtn = BT.CreateButton(botBar, BT.L.BTN_CHAR_MGMT, 90, 26)
 sortCharsBtn:SetPoint("RIGHT", settingsBtn, "LEFT", -8, 0)
 sortCharsBtn:SetScript("OnClick", function()
     if BT.UI.SortChars then BT.UI.SortChars.Open() end
@@ -118,7 +118,7 @@ lockCheckMark:Hide()
 
 local lockLabel = botBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 lockLabel:SetPoint("RIGHT", lockCb, "LEFT", -4, 0)
-lockLabel:SetText("锁定窗口大小")
+lockLabel:SetText(BT.L.LBL_LOCK_WINDOW)
 lockLabel:SetTextColor(unpack(BT.COLORS.textMuted))
 
 lockCb:SetScript("OnEnter", function() lockCheckBg:SetColorTexture(0.28, 0.28, 0.38, 1) end)
@@ -165,7 +165,7 @@ leftHead:SetBackdropColor(unpack(BT.COLORS.bgLight))
 leftHead:SetBackdropBorderColor(unpack(BT.COLORS.border))
 local leftHeadFS = leftHead:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 leftHeadFS:SetPoint("LEFT", leftHead, "LEFT", 10, 0)
-leftHeadFS:SetText("|cffaa88ff战团事项|r")
+leftHeadFS:SetText("|cffaa88ff" .. BT.L.COL_WARBAND .. "|r")
 
 -- 左列滚动区
 local leftScroll = CreateFrame("ScrollFrame", nil, leftArea, "UIPanelScrollFrameTemplate")
@@ -196,7 +196,7 @@ rightHeadFrame:SetBackdropBorderColor(unpack(BT.COLORS.border))
 local rightLabel = rightHeadFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 rightLabel:SetPoint("LEFT", rightHeadFrame, "LEFT", 6, 0)
 rightLabel:SetTextColor(unpack(BT.COLORS.accent))
-rightLabel:SetText("|cff88bbff角色事项|r")
+rightLabel:SetText("|cff88bbff" .. BT.L.COL_CHAR .. "|r")
 
 -- 右列滚动区（垂直）
 local rightScroll = CreateFrame("ScrollFrame", nil, rightArea, "UIPanelScrollFrameTemplate")
@@ -666,7 +666,7 @@ local function MakeDragTarget(f, type, id, catID, scope, label, items)
     f:EnableMouse(true)
     f:SetScript("OnMouseDown", function(_, btn)
         if btn == "LeftButton" and IsShiftKeyDown() then
-            local prefix = (type == "category") and "|cffaa88ff[分类]|r " or ""
+            local prefix = (type == "category") and "|cffaa88ff" .. BT.L.DRAG_CAT_PREFIX .. "|r" or ""
             dragState = { type=type, id=id, catID=catID, scope=scope, label=label, items=items }
             dragGhostFS:SetText(prefix .. label)
             dragGhost:Show()
@@ -782,7 +782,7 @@ local function RefreshLeftColumn(filterText)
             cb:SetScript("OnEnter", function()
                 GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
-                GameTooltip:AddLine("该类型的事项会在相关条件符合时自动完成，无法手动更改", 0.8, 0.8, 0.8, true)
+                GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
                 GameTooltip:Show()
             end)
             cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1151,14 +1151,14 @@ local function RefreshRightColumn(filterText)
                 local en = todo.enabledChars and todo.enabledChars[charKey]
                 if en then
                     if autoTracked then
-                        GameTooltip:AddLine("该类型的事项会在相关条件符合时自动完成，无法手动更改", 0.8, 0.8, 0.8, true)
+                        GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
                     else
                         local cp = BT.Data.GetCharCompleted(todoID, charKey)
-                        GameTooltip:AddLine(cp and "点击：取消完成" or "点击：标记完成", 0.8, 0.8, 0.8)
+                        GameTooltip:AddLine(cp and BT.L.TOOLTIP_CLICK_UNDO or BT.L.TOOLTIP_CLICK_DONE, 0.8, 0.8, 0.8)
                     end
-                    GameTooltip:AddLine("Shift+点击：禁用", 0.55, 0.55, 0.6)
+                    GameTooltip:AddLine(BT.L.TOOLTIP_SHIFT_DIS, 0.55, 0.55, 0.6)
                 else
-                    GameTooltip:AddLine("Shift+点击：启用", 0.8, 0.8, 0.8)
+                    GameTooltip:AddLine(BT.L.TOOLTIP_SHIFT_EN, 0.8, 0.8, 0.8)
                 end
                 GameTooltip:Show()
             end)
@@ -1221,7 +1221,7 @@ end)
 local filterHint = filterBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 filterHint:SetPoint("LEFT", filterBox, "LEFT", 6, 0)
 filterHint:SetTextColor(0.4, 0.4, 0.45)
-filterHint:SetText("搜索...")
+filterHint:SetText(BT.L.SEARCH_HINT)
 
 filterBox:SetScript("OnTextChanged", function(self)
     local txt = self:GetText()
@@ -1248,7 +1248,7 @@ formBG:SetColorTexture(0, 0, 0, 0.5)
 
 local formTitle = formFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 formTitle:SetPoint("TOP", formFrame, "TOP", 0, -14)
-formTitle:SetText("添加待办事项")
+formTitle:SetText(BT.L.FORM_TITLE_ADD)
 formTitle:SetTextColor(unpack(BT.COLORS.textTitle))
 
 -- 关闭表单
@@ -1314,16 +1314,16 @@ local function MakeEditBox(parent, yOffset, w, h, multiLine)
 end
 
 -- 表单字段
-MakeFieldLabel(formFrame, "标题 *",       -42)
+local _flTitle   = MakeFieldLabel(formFrame, BT.L.FIELD_TITLE,       -42)
 local fTitle   = MakeEditBox(formFrame, -58, 340, 24)
 
-MakeFieldLabel(formFrame, "详细描述",     -92)
+local _flDetails = MakeFieldLabel(formFrame, BT.L.FIELD_DETAILS,     -92)
 local fDetails = MakeEditBox(formFrame, -108, 340, 50, true)
 
-MakeFieldLabel(formFrame, "分类 *",       -170)
+local _flCat     = MakeFieldLabel(formFrame, BT.L.FIELD_CATEGORY,       -170)
 
 -- 分类下拉（简单按钮实现）
-local catDropBtn = BT.CreateButton(formFrame, "请选择分类", 200, 24)
+local catDropBtn = BT.CreateButton(formFrame, BT.L.SELECT_CATEGORY, 200, 24)
 catDropBtn:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16, -186)
 local selectedCatID = nil
 
@@ -1386,10 +1386,10 @@ catDropBtn:SetScript("OnClick", function()
     end
 end)
 
-MakeFieldLabel(formFrame, "重置类型",     -222)
+local _flReset   = MakeFieldLabel(formFrame, BT.L.FIELD_RESET,     -222)
 
 -- 重置类型选择
-local resetTypes = { { id = "none", label = "一次性" }, { id = "daily", label = "每日" }, { id = "weekly", label = "每周" } }
+local resetTypes = { { id = "none", label = BT.L.RESET_NONE }, { id = "daily", label = BT.L.RESET_DAILY }, { id = "weekly", label = BT.L.RESET_WEEKLY } }
 local selectedReset = "none"
 local resetBtns = {}
 
@@ -1420,10 +1420,10 @@ end
 resetBtns[1].isSelected = true
 resetBtns[1]:SetBackdropColor(0.18, 0.35, 0.55, 1)
 
-MakeFieldLabel(formFrame, "自动追踪",     -272)
+local _flTrack   = MakeFieldLabel(formFrame, BT.L.FIELD_AUTO_TRACK,     -272)
 
 -- 追踪类型选择
-local trackTypes = { { id = "none", label = "无" }, { id = "quest", label = "Quest ID" }, { id = "instance_boss", label = "副本 Boss" } }
+local trackTypes = { { id = "none", label = BT.L.TRACK_NONE }, { id = "quest", label = BT.L.TRACK_QUEST }, { id = "instance_boss", label = BT.L.TRACK_BOSS } }
 local selectedTrack = "none"
 local trackBtns = {}
 
@@ -1470,13 +1470,13 @@ local function parseIDs(text)
 end
 
 -- Quest ID 输入（支持多个逗号分隔）
-formFrame.questIDLabel = MakeFieldLabel(formFrame, "Quest ID（多个用逗号分隔）", -318)
+formFrame.questIDLabel = MakeFieldLabel(formFrame, BT.L.QUEST_ID_LABEL, -318)
 formFrame.questIDLabel:Hide()
 formFrame.questIDBox = MakeEditBox(formFrame, -334, 300, 22)
 formFrame.questIDBox:Hide()
 
 -- 副本 Boss：输入 Encounter ID（逗号分隔多个）
-formFrame.bossEncounterIDLabel = MakeFieldLabel(formFrame, "Encounter ID（逗号分隔多个）", -318)
+formFrame.bossEncounterIDLabel = MakeFieldLabel(formFrame, BT.L.ENCOUNTER_ID_LABEL, -318)
 formFrame.bossEncounterIDLabel:Hide()
 formFrame.bossEncounterIDBox = MakeEditBox(formFrame, -334, 300, 22)
 formFrame.bossEncounterIDBox:Hide()
@@ -1493,7 +1493,7 @@ local function ResetForm()
     selectedCatID  = nil
     selectedReset  = "none"
     selectedTrack  = "none"
-    catDropBtn.label:SetText("请选择分类")
+    catDropBtn.label:SetText(BT.L.SELECT_CATEGORY)
     for i, b in ipairs(resetBtns)  do b.isSelected = false; b:SetBackdropColor(0.15, 0.15, 0.22, 1) end
     for i, b in ipairs(trackBtns)  do b.isSelected = false; b:SetBackdropColor(0.15, 0.15, 0.22, 1) end
     resetBtns[1].isSelected = true; resetBtns[1]:SetBackdropColor(0.18, 0.35, 0.55, 1)
@@ -1509,16 +1509,16 @@ local function ResetForm()
     if UpdateSaveBtn then UpdateSaveBtn() end
 end
 
-local saveBtn = BT.CreateButton(formFrame, "保存", 100, 26)
+local saveBtn = BT.CreateButton(formFrame, BT.L.BTN_SAVE, 100, 26)
 saveBtn:SetPoint("BOTTOMRIGHT", formFrame, "BOTTOMRIGHT", -16, 12)
 saveBtn:SetScript("OnClick", function()
     local title = fTitle:GetText()
     if not title or title == "" then
-        print("|cffff4444[BrainTask]|r 标题不能为空")
+        print("|cffff4444[BrainTask]|r " .. BT.L.ERR_TITLE_EMPTY)
         return
     end
     if not selectedCatID then
-        print("|cffff4444[BrainTask]|r 请选择分类")
+        print("|cffff4444[BrainTask]|r " .. BT.L.ERR_NO_CATEGORY)
         return
     end
 
@@ -1559,7 +1559,7 @@ end
 
 fTitle:SetScript("OnTextChanged", function() UpdateSaveBtn() end)
 
-local cancelBtn = BT.CreateButton(formFrame, "取消", 80, 26)
+local cancelBtn = BT.CreateButton(formFrame, BT.L.BTN_CANCEL, 80, 26)
 cancelBtn:SetPoint("RIGHT", saveBtn, "LEFT", -8, 0)
 cancelBtn:SetScript("OnClick", function()
     formFrame:Hide()
@@ -1576,13 +1576,13 @@ confirmFrame:Hide()
 
 local confirmFS = confirmFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 confirmFS:SetPoint("CENTER", confirmFrame, "CENTER", 0, 20)
-confirmFS:SetText("确定删除此待办事项？")
+confirmFS:SetText(BT.L.CONFIRM_DEL_TODO)
 confirmFS:SetTextColor(1, 0.8, 0.2)
 
-local confirmYes = BT.CreateButton(confirmFrame, "删除", 90, 26)
+local confirmYes = BT.CreateButton(confirmFrame, BT.L.BTN_DELETE, 90, 26)
 confirmYes:SetPoint("BOTTOMRIGHT", confirmFrame, "BOTTOM", -4, 10)
 
-local confirmNo = BT.CreateButton(confirmFrame, "取消", 90, 26)
+local confirmNo = BT.CreateButton(confirmFrame, BT.L.BTN_CANCEL, 90, 26)
 confirmNo:SetPoint("BOTTOMLEFT", confirmFrame, "BOTTOM", 4, 10)
 confirmNo:SetScript("OnClick", function() confirmFrame:Hide() end)
 
@@ -1599,8 +1599,8 @@ end
 function DB.OpenTodoForm(scope, editID)
     ResetForm()
     formEditScope = scope or "warband"
-    formTitle:SetText(editID and "编辑待办事项" or
-        (scope == "warband" and "添加战团事项" or "添加角色事项"))
+    formTitle:SetText(editID and BT.L.FORM_TITLE_EDIT or
+        (scope == "warband" and BT.L.FORM_TITLE_WARBAND or BT.L.FORM_TITLE_CHAR))
 
     if editID then
         formEditingID = editID
@@ -1653,6 +1653,44 @@ function DB.OpenTodoForm(scope, editID)
     UpdateSaveBtn()
     formFrame:Show()
 end
+
+-- ── 本地化刷新 ────────────────────────────────────────────────────────────
+
+BT.Locale.Register(function()
+    -- 底部工具栏
+    addWarbandBtn.label:SetText(BT.L.BTN_ADD_WARBAND)
+    addCharBtn.label:SetText(BT.L.BTN_ADD_CHAR)
+    globalSettingsBtn.label:SetText(BT.L.BTN_SETTINGS)
+    settingsBtn.label:SetText(BT.L.BTN_CATEGORY_MGMT)
+    sortCharsBtn.label:SetText(BT.L.BTN_CHAR_MGMT)
+    lockLabel:SetText(BT.L.LBL_LOCK_WINDOW)
+    -- 列标题
+    leftHeadFS:SetText("|cffaa88ff" .. BT.L.COL_WARBAND .. "|r")
+    rightLabel:SetText("|cff88bbff" .. BT.L.COL_CHAR .. "|r")
+    filterHint:SetText(BT.L.SEARCH_HINT)
+    -- 表单字段标签
+    _flTitle:SetText(BT.L.FIELD_TITLE)
+    _flDetails:SetText(BT.L.FIELD_DETAILS)
+    _flCat:SetText(BT.L.FIELD_CATEGORY)
+    _flReset:SetText(BT.L.FIELD_RESET)
+    _flTrack:SetText(BT.L.FIELD_AUTO_TRACK)
+    formFrame.questIDLabel:SetText(BT.L.QUEST_ID_LABEL)
+    formFrame.bossEncounterIDLabel:SetText(BT.L.ENCOUNTER_ID_LABEL)
+    -- 重置类型 / 追踪类型按钮
+    resetBtns[1].label:SetText(BT.L.RESET_NONE)
+    resetBtns[2].label:SetText(BT.L.RESET_DAILY)
+    resetBtns[3].label:SetText(BT.L.RESET_WEEKLY)
+    trackBtns[1].label:SetText(BT.L.TRACK_NONE)
+    trackBtns[2].label:SetText(BT.L.TRACK_QUEST)
+    trackBtns[3].label:SetText(BT.L.TRACK_BOSS)
+    -- 表单按钮
+    saveBtn.label:SetText(BT.L.BTN_SAVE)
+    cancelBtn.label:SetText(BT.L.BTN_CANCEL)
+    -- 删除确认
+    confirmFS:SetText(BT.L.CONFIRM_DEL_TODO)
+    confirmYes.label:SetText(BT.L.BTN_DELETE)
+    confirmNo.label:SetText(BT.L.BTN_CANCEL)
+end)
 
 function DB.Refresh()
     if not frame:IsVisible() then return end

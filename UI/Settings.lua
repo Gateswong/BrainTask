@@ -31,7 +31,7 @@ BT.MakeDraggable(frame, titleBar)
 
 local titleFS = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 titleFS:SetPoint("LEFT", titleBar, "LEFT", 12, 0)
-titleFS:SetText("|cff55aaff分类管理|r")
+titleFS:SetText("|cff55aaff" .. BT.L.TITLE_CAT_MGMT .. "|r")
 
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(20, 20)
@@ -65,13 +65,13 @@ confirmFrame:Hide()
 
 local confirmFS = confirmFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 confirmFS:SetPoint("CENTER", confirmFrame, "CENTER", 0, 18)
-confirmFS:SetText("此分类下有关联事项，\n确定要删除并解除关联？")
+confirmFS:SetText(BT.L.CONFIRM_DEL_CAT)
 confirmFS:SetTextColor(1, 0.8, 0.2)
 
-local confirmYes = BT.CreateButton(confirmFrame, "删除", 90, 24)
+local confirmYes = BT.CreateButton(confirmFrame, BT.L.BTN_DELETE, 90, 24)
 confirmYes:SetPoint("BOTTOMRIGHT", confirmFrame, "BOTTOM", -4, 8)
 
-local confirmNo = BT.CreateButton(confirmFrame, "取消", 90, 24)
+local confirmNo = BT.CreateButton(confirmFrame, BT.L.BTN_CANCEL, 90, 24)
 confirmNo:SetPoint("BOTTOMLEFT", confirmFrame, "BOTTOM", 4, 8)
 confirmNo:SetScript("OnClick", function() confirmFrame:Hide() end)
 
@@ -206,7 +206,7 @@ addBar:SetBackdropBorderColor(unpack(BT.COLORS.border))
 
 local addLabel = addBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 addLabel:SetPoint("TOPLEFT", addBar, "TOPLEFT", 12, -8)
-addLabel:SetText("新分类名称")
+addLabel:SetText(BT.L.ADDCAT_LABEL)
 addLabel:SetTextColor(unpack(BT.COLORS.textMuted))
 
 local newCatBox = CreateFrame("EditBox", nil, addBar, "BackdropTemplate")
@@ -221,7 +221,7 @@ newCatBox:SetAutoFocus(false)
 newCatBox:SetMaxLetters(64)
 newCatBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
 
-local addBtn = BT.CreateButton(addBar, "+ 添加", 90, 24)
+local addBtn = BT.CreateButton(addBar, BT.L.BTN_ADD_CAT, 90, 24)
 addBtn:SetPoint("LEFT", newCatBox, "RIGHT", 8, 0)
 
 local function DoAddCategory()
@@ -236,6 +236,17 @@ end
 
 addBtn:SetScript("OnClick", DoAddCategory)
 newCatBox:SetScript("OnEnterPressed", DoAddCategory)
+
+-- ── 本地化刷新 ────────────────────────────────────────────────────────────
+
+BT.Locale.Register(function()
+    titleFS:SetText("|cff55aaff" .. BT.L.TITLE_CAT_MGMT .. "|r")
+    confirmFS:SetText(BT.L.CONFIRM_DEL_CAT)
+    confirmYes.label:SetText(BT.L.BTN_DELETE)
+    confirmNo.label:SetText(BT.L.BTN_CANCEL)
+    addLabel:SetText(BT.L.ADDCAT_LABEL)
+    addBtn.label:SetText(BT.L.BTN_ADD_CAT)
+end)
 
 -- ── 公共接口 ──────────────────────────────────────────────────────────────
 

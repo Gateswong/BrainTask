@@ -39,12 +39,24 @@ BT.charKey = nil
 
 -- ── 事件帧 ──────────────────────────────────────────────────────────────
 local eventFrame = CreateFrame("Frame")
+eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("QUEST_LOG_UPDATE")
 eventFrame:RegisterEvent("UPDATE_INSTANCE_INFO")
 
-eventFrame:SetScript("OnEvent", function(self, event)
-    if event == "PLAYER_LOGIN" then
+eventFrame:SetScript("OnEvent", function(self, event, ...)
+    if event == "ADDON_LOADED" and ... == "BrainTask" then
+        -- SavedVariables 在此事件后才可读取
+        local db = BrainTaskDB
+        local savedLang = db and db.language
+        if savedLang and savedLang ~= "auto" then
+            local newLocale = BT.Locale.all[savedLang]
+            if newLocale and newLocale ~= BT.L then
+                BT.L = newLocale
+                BT.Locale.ApplyAll()
+            end
+        end
+    elseif event == "PLAYER_LOGIN" then
         BT.OnLogin()
     elseif event == "QUEST_LOG_UPDATE" or event == "UPDATE_INSTANCE_INFO" then
         if BT.Tracking then
@@ -67,6 +79,7 @@ function BT.OnLogin()
     db.lastWeeklyReset = db.lastWeeklyReset or 0
     db.nextTodoID    = db.nextTodoID    or 1
     db.nextCatID     = db.nextCatID     or 1
+    db.language        = db.language        or "auto"
     db.minimapAngle    = db.minimapAngle    or math.rad(225)
     db.dashboardLayout = db.dashboardLayout or { w = 920, h = 640, leftW = 400, labelW = 260, locked = false }
     db.charOrder       = db.charOrder       or {}
@@ -127,13 +140,13 @@ function BT.OnLogin()
         end
     end
 
-    print("|cff55aaff[BrainTask]|r 已加载。/bt 打开待办窗口。")
+    print("|cff55aaff[BrainTask]|r " .. BT.L.LOADED_MSG)
 end
 
 -- ── 快捷键绑定（纯 Lua，无需 Bindings.xml）─────────────────────────────
 -- WoW 在按键触发时直接调用同名全局函数
 BINDING_HEADER_BRAINTASK        = "BrainTask"
-BINDING_NAME_BRAINTASK_TOGGLE   = "切换 BrainTask 浮动窗口"
+BINDING_NAME_BRAINTASK_TOGGLE   = BT.L.KEYBIND_TOGGLE
 
 function BRAINTASK_TOGGLE()
     if BT.UI.FloatWindow then
