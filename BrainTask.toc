@@ -1,7 +1,7 @@
 ## Interface: 120001
 ## Title: BrainTask
-## Notes: 多角色待办事项追踪
-## Author:
+## Notes: Task management for warband and all your characters!
+## Author: ネ申イ山
 ## Version: 1.0.0
 ## SavedVariables: BrainTaskDB
 
