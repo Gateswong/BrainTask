@@ -16,6 +16,8 @@ local frame = BT.CreateBackdropFrame("Frame", "BrainTaskFloatWindow", UIParent, 
 frame:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -60, -200)
 frame:SetFrameStrata("MEDIUM")
 frame:EnableMouse(true)
+frame:SetToplevel(true)
+frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
 
 -- 标题栏
@@ -37,13 +39,12 @@ titleText:SetText("|cff55aaffBrainTask|r")
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(20, 20)
 closeBtn:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
-local closeX = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-closeX:SetAllPoints()
-closeX:SetText("X")
-closeX:SetTextColor(0.6, 0.6, 0.65)
+local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
+closeTex:SetAllPoints()
+closeTex:SetAtlas("uitools-icon-close")
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
-closeBtn:SetScript("OnEnter", function() closeX:SetTextColor(1, 0.3, 0.3) end)
-closeBtn:SetScript("OnLeave", function() closeX:SetTextColor(0.6, 0.6, 0.65) end)
+closeBtn:SetScript("OnEnter", function() closeTex:SetVertexColor(1, 0.3, 0.3) end)
+closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
 
 -- Dashboard 链接按钮（标题栏，关闭按钮左侧）
 local dashBtn = CreateFrame("Button", nil, titleBar)
@@ -54,7 +55,7 @@ dashFS:SetAllPoints()
 dashFS:SetText("≡")
 dashFS:SetTextColor(0.6, 0.6, 0.65)
 dashBtn:SetScript("OnClick", function()
-    if BT.UI.Dashboard then BT.UI.Dashboard.Open() end
+    if BT.UI.Dashboard then BT.UI.Dashboard.Toggle() end
 end)
 dashBtn:SetScript("OnEnter", function() dashFS:SetTextColor(0.4, 0.8, 1) end)
 dashBtn:SetScript("OnLeave", function() dashFS:SetTextColor(0.6, 0.6, 0.65) end)
@@ -106,10 +107,17 @@ local function AcquireRow(parent)
         end)
         row.cb = cb
 
-        -- 标题文字
+        -- 重置图标（右对齐，独立 FontString）
+        local resetFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        resetFS:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+        resetFS:SetJustifyH("RIGHT")
+        resetFS:SetHeight(ROW_H)
+        row.resetFS = resetFS
+
+        -- 标题文字（右端锁定到 resetFS 左侧）
         local titleFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         titleFS:SetPoint("LEFT", cb, "RIGHT", 6, 0)
-        titleFS:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+        titleFS:SetPoint("RIGHT", resetFS, "LEFT", -2, 0)
         titleFS:SetJustifyH("LEFT")
         titleFS:SetHeight(ROW_H)
         row.titleFS = titleFS
@@ -119,6 +127,27 @@ local function AcquireRow(parent)
         rowBg:SetAllPoints()
         rowBg:SetColorTexture(0, 0, 0, 0)
         row.rowBg = rowBg
+
+        -- 超链接支持（标题中的物品/成就链接可点击）
+        row:SetHyperlinksEnabled(true)
+        row:SetScript("OnHyperlinkClick", function(self, link, text, button)
+            SetItemRef(link, text, button)
+        end)
+        row:SetScript("OnHyperlinkEnter", function(self, link, text)
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+            GameTooltip:SetHyperlink(link)
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnHyperlinkLeave", function(self)
+            GameTooltip:Hide()
+            if self.details and self.details ~= "" then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:ClearLines()
+                GameTooltip:AddLine(self.todoTitle or "", 1, 1, 1)
+                GameTooltip:AddLine(self.details, 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end
+        end)
 
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
@@ -148,6 +177,7 @@ local function ReleaseRow(row)
     row.cb:SetScript("OnClick", nil)
     row.details = nil
     row.todoTitle = nil
+    row.resetFS:SetText("")
     table.insert(rowPool, row)
 end
 
@@ -235,13 +265,13 @@ function FW.Refresh()
         row.todoTitle = todo.title
 
         -- 标题文字（完成则加删除线色）
-        local resetLabel = BT.ResetTypeLabel(todo.resetType)
-        local scopeTag   = todo.scope == "warband" and "|cffaa88ff[W]|r " or ""
+        local scopeTag = todo.scope == "warband" and CreateAtlasMarkup("warbands-icon", 14, 14) .. " " or ""
         if completed then
-            row.titleFS:SetText("|cff606060" .. todo.title .. "|r " .. resetLabel)
+            row.titleFS:SetText("|cff606060" .. todo.title .. "|r")
         else
-            row.titleFS:SetText(scopeTag .. todo.title .. " " .. resetLabel)
+            row.titleFS:SetText(scopeTag .. todo.title)
         end
+        row.resetFS:SetText(BT.ResetTypeLabel(todo.resetType))
 
         -- 复选框状态
         if completed then
@@ -282,20 +312,21 @@ end
 
 function FW.Toggle()
     if frame:IsVisible() then
-        frame:Hide()
+        FW.Close()
     else
-        frame:Show()
-        FW.Refresh()
+        FW.Open()
     end
 end
 
 function FW.Open()
     frame:Show()
     FW.Refresh()
+    if BrainTaskDB then BrainTaskDB.floatWindowVisible = true end
 end
 
 function FW.Close()
     frame:Hide()
+    if BrainTaskDB then BrainTaskDB.floatWindowVisible = false end
 end
 
 function FW.SetScale(v)

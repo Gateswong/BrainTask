@@ -1,4 +1,4 @@
--- BrainTask UI: 角色排序窗口
+-- BrainTask UI: 角色管理窗口
 
 BrainTask = BrainTask or {}
 BrainTask.UI = BrainTask.UI or {}
@@ -6,8 +6,10 @@ local BT = BrainTask
 BT.UI.SortChars = {}
 local SC = BT.UI.SortChars
 
-local WIN_W, WIN_H = 280, 460
+local WIN_W, WIN_H = 300, 460
 local ROW_H = 32
+local ROW_GAP = 2
+local ROW_STRIDE = ROW_H + ROW_GAP
 
 -- ── 主框架 ────────────────────────────────────────────────────────────────
 
@@ -15,6 +17,8 @@ local frame = BT.CreateBackdropFrame("Frame", "BrainTaskSortChars", UIParent, WI
 frame:SetPoint("CENTER")
 frame:SetFrameStrata("DIALOG")
 frame:EnableMouse(true)
+frame:SetToplevel(true)
+frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
 
 -- 标题栏
@@ -30,22 +34,23 @@ BT.MakeDraggable(frame, titleBar)
 
 local titleFS = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
 titleFS:SetPoint("LEFT", titleBar, "LEFT", 12, 0)
-titleFS:SetText("|cff55aaff角色排序|r")
+titleFS:SetText("|cff55aaff角色管理|r")
 
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(20, 20)
 closeBtn:SetPoint("RIGHT", titleBar, "RIGHT", -8, 0)
-local cX = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-cX:SetAllPoints() cX:SetText("X") cX:SetTextColor(0.6, 0.6, 0.65)
+local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
+closeTex:SetAllPoints()
+closeTex:SetAtlas("uitools-icon-close")
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
-closeBtn:SetScript("OnEnter", function() cX:SetTextColor(1, 0.3, 0.3) end)
-closeBtn:SetScript("OnLeave", function() cX:SetTextColor(0.6, 0.6, 0.65) end)
+closeBtn:SetScript("OnEnter", function() closeTex:SetVertexColor(1, 0.3, 0.3) end)
+closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
 
 -- 说明文字
 local hintFS = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 hintFS:SetPoint("TOPLEFT", frame, "TOPLEFT", 12, -36)
 hintFS:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -12, -36)
-hintFS:SetText("当前角色始终显示在 Dashboard 第一列")
+hintFS:SetText("拖拽行排序 · 点击眼睛图标切换显示")
 hintFS:SetTextColor(unpack(BT.COLORS.textMuted))
 hintFS:SetJustifyH("LEFT")
 
@@ -62,12 +67,79 @@ scrollFrame:SetScrollChild(content)
 
 local rows = {}
 
--- ── 渲染列表 ──────────────────────────────────────────────────────────────
+-- ── 拖拽系统 ──────────────────────────────────────────────────────────────
 
-local function SwapOrder(i, j)
-    local order = BrainTaskDB.charOrder
-    order[i], order[j] = order[j], order[i]
+local dragState = nil  -- { fromIdx, targetIdx }
+
+local dragGhost = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+dragGhost:SetTextColor(1, 1, 0.5)
+dragGhost:Hide()
+
+local dropLine = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+dropLine:SetHeight(2)
+dropLine:SetBackdrop({ bgFile = "Interface/Tooltips/UI-Tooltip-Background" })
+dropLine:SetBackdropColor(0.3, 0.7, 1, 1)
+dropLine:Hide()
+
+local dragOverlay = CreateFrame("Frame", nil, frame)
+dragOverlay:SetAllPoints()
+dragOverlay:SetFrameStrata("TOOLTIP")
+dragOverlay:EnableMouse(true)
+dragOverlay:Hide()
+
+local function GetTargetIdx(cy)
+    local scale = UIParent:GetEffectiveScale()
+    local contentTop = content:GetTop()
+    if not contentTop then return 1 end
+    local relY = (cy / scale) - contentTop
+    local idx = math.floor(-relY / ROW_STRIDE) + 1
+    return math.max(1, math.min(#rows, idx))
 end
+
+local function UpdateDropLine(targetIdx)
+    local lineY
+    if targetIdx <= 1 then
+        lineY = 0
+    else
+        lineY = -(targetIdx - 1) * ROW_STRIDE
+    end
+    dropLine:ClearAllPoints()
+    dropLine:SetPoint("TOPLEFT",  content, "TOPLEFT",  4, lineY)
+    dropLine:SetPoint("TOPRIGHT", content, "TOPRIGHT", -4, lineY)
+    dropLine:Show()
+end
+
+dragOverlay:SetScript("OnUpdate", function()
+    if not dragState then return end
+    local cx, cy = GetCursorPosition()
+    local scale = UIParent:GetEffectiveScale()
+    dragGhost:ClearAllPoints()
+    dragGhost:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", cx / scale + 10, cy / scale)
+    local targetIdx = GetTargetIdx(cy)
+    dragState.targetIdx = targetIdx
+    UpdateDropLine(targetIdx)
+end)
+
+dragOverlay:SetScript("OnMouseUp", function()
+    if not dragState then return end
+    local from = dragState.fromIdx
+    local to   = dragState.targetIdx or from
+    if from ~= to then
+        local order = BrainTaskDB.charOrder
+        local item = table.remove(order, from)
+        -- 插入位置需修正：如果 to > from，remove 后 to 应减 1
+        local insertAt = (to > from) and (to - 1) or to
+        table.insert(order, insertAt, item)
+    end
+    dragState = nil
+    dragGhost:Hide()
+    dropLine:Hide()
+    dragOverlay:Hide()
+    SC.Refresh()
+    if BT.UI.Dashboard then BT.UI.Dashboard.Refresh() end
+end)
+
+-- ── 渲染列表 ──────────────────────────────────────────────────────────────
 
 function SC.Refresh()
     for _, r in ipairs(rows) do r:Hide() end
@@ -76,8 +148,9 @@ function SC.Refresh()
     local order = BrainTaskDB and BrainTaskDB.charOrder
     if not order then return end
 
-    local ck = BT.charKey
-    local y  = 0
+    local ck     = BT.charKey
+    local hidden = BrainTaskDB.hiddenChars or {}
+    local y      = 0
 
     for idx, key in ipairs(order) do
         local info = BrainTaskDB.knownChars[key]
@@ -92,60 +165,76 @@ function SC.Refresh()
             bg:SetAllPoints()
             bg:SetColorTexture(1, 1, 1, (#rows % 2 == 0) and 0.05 or 0.02)
 
-            -- 角色名 + 职业
-            local nameStr = info.name or key
-            if key == ck then
-                nameStr = nameStr .. " |cff55aaff(当前)|r"
-            end
+            -- 角色名 + 服务器
+            local nameStr = (info.name or key)
+                .. " |cff505060" .. (info.realm or "") .. "|r"
+                .. (key == ck and " |cff55aaff(当前)|r" or "")
             local nameFS = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            nameFS:SetPoint("LEFT", row, "LEFT", 10, 0)
-            nameFS:SetPoint("RIGHT", row, "RIGHT", -52, 0)
+            nameFS:SetPoint("LEFT",  row, "LEFT",  10, 0)
+            nameFS:SetPoint("RIGHT", row, "RIGHT", -30, 0)
             nameFS:SetJustifyH("LEFT")
             nameFS:SetText(nameStr)
-            nameFS:SetTextColor(unpack(BT.COLORS.textNormal))
 
-            -- ↑ 按钮
-            local upBtn = CreateFrame("Button", nil, row)
-            upBtn:SetSize(20, 20)
-            upBtn:SetPoint("RIGHT", row, "RIGHT", -28, 0)
-            local upFS = upBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            upFS:SetAllPoints() upFS:SetText("↑")
-            if idx == 1 then
-                upFS:SetTextColor(0.3, 0.3, 0.35)
+            local classKey = info.class
+            local clr = classKey and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classKey]
+            if clr then
+                nameFS:SetTextColor(clr.r, clr.g, clr.b)
             else
-                upFS:SetTextColor(0.6, 0.7, 0.9)
-                upBtn:SetScript("OnEnter", function() upFS:SetTextColor(0.3, 0.7, 1) end)
-                upBtn:SetScript("OnLeave", function() upFS:SetTextColor(0.6, 0.7, 0.9) end)
-                local i = idx
-                upBtn:SetScript("OnClick", function()
-                    SwapOrder(i, i - 1)
-                    SC.Refresh()
-                    if BT.UI.Dashboard then BT.UI.Dashboard.Refresh() end
-                end)
+                nameFS:SetTextColor(unpack(BT.COLORS.textNormal))
             end
 
-            -- ↓ 按钮
-            local downBtn = CreateFrame("Button", nil, row)
-            downBtn:SetSize(20, 20)
-            downBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
-            local downFS = downBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            downFS:SetAllPoints() downFS:SetText("↓")
-            if idx == #order then
-                downFS:SetTextColor(0.3, 0.3, 0.35)
-            else
-                downFS:SetTextColor(0.6, 0.7, 0.9)
-                downBtn:SetScript("OnEnter", function() downFS:SetTextColor(0.3, 0.7, 1) end)
-                downBtn:SetScript("OnLeave", function() downFS:SetTextColor(0.6, 0.7, 0.9) end)
-                local i = idx
-                downBtn:SetScript("OnClick", function()
-                    SwapOrder(i, i + 1)
-                    SC.Refresh()
-                    if BT.UI.Dashboard then BT.UI.Dashboard.Refresh() end
-                end)
-            end
+            -- 可见性切换按钮
+            local isHidden = hidden[key]
+            local visBtn = CreateFrame("Button", nil, row)
+            visBtn:SetSize(20, 20)
+            visBtn:SetPoint("RIGHT", row, "RIGHT", -6, 0)
+            local visTex = visBtn:CreateTexture(nil, "ARTWORK")
+            visTex:SetAllPoints()
+            visTex:SetAtlas(isHidden and "GM-icon-visibleDis-pressed" or "GM-icon-visible-hover")
+            local capturedKey = key
+            visBtn:SetScript("OnClick", function()
+                local db = BrainTaskDB
+                db.hiddenChars = db.hiddenChars or {}
+                if db.hiddenChars[capturedKey] then
+                    db.hiddenChars[capturedKey] = nil
+                else
+                    db.hiddenChars[capturedKey] = true
+                end
+                visTex:SetAtlas(db.hiddenChars[capturedKey] and "GM-icon-visibleDis-pressed" or "GM-icon-visible-hover")
+                if BT.UI.Dashboard then BT.UI.Dashboard.Refresh() end
+            end)
+
+            -- 整行可拖拽（visBtn 会消耗自己的 OnMouseDown，不会传到 row）
+            row:EnableMouse(true)
+            local capturedIdx = idx
+            local capturedName = info.name or key
+            row:SetScript("OnMouseDown", function(_, btn)
+                if btn ~= "LeftButton" then return end
+                dragState = { fromIdx = capturedIdx, targetIdx = capturedIdx }
+                dragGhost:SetText(capturedName)
+                dragGhost:Show()
+                dragOverlay:Show()
+            end)
+            row:SetScript("OnMouseUp", function(_, btn)
+                if btn ~= "LeftButton" or not dragState then return end
+                local from = dragState.fromIdx
+                local to   = dragState.targetIdx or from
+                if from ~= to then
+                    local order = BrainTaskDB.charOrder
+                    local item = table.remove(order, from)
+                    local insertAt = (to > from) and (to - 1) or to
+                    table.insert(order, insertAt, item)
+                end
+                dragState = nil
+                dragGhost:Hide()
+                dropLine:Hide()
+                dragOverlay:Hide()
+                SC.Refresh()
+                if BT.UI.Dashboard then BT.UI.Dashboard.Refresh() end
+            end)
 
             table.insert(rows, row)
-            y = y + ROW_H + 2
+            y = y + ROW_STRIDE
         end
     end
 

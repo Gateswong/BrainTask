@@ -73,16 +73,21 @@ function BT.OnLogin()
     db.pollInterval    = db.pollInterval    or 15
     db.dashboardScale  = db.dashboardScale  or 1.0
     db.floatWindowScale = db.floatWindowScale or 1.0
+    db.hiddenChars     = db.hiddenChars     or {}
 
     -- 注册当前角色
     local name  = UnitName("player")
     local realm = GetRealmName()
     BT.charKey  = name .. "-" .. realm
+    local isNewChar = db.knownChars[BT.charKey] == nil
     db.knownChars[BT.charKey] = {
         name  = name,
         realm = realm,
         class = select(2, UnitClass("player")),
     }
+    if isNewChar then
+        db.hiddenChars[BT.charKey] = true
+    end
 
     -- 将所有 knownChars 中不在 charOrder 里的角色补入末尾（兼容 charOrder 引入前的旧数据）
     for k in pairs(db.knownChars) do
@@ -106,6 +111,11 @@ function BT.OnLogin()
     end
     if BT.UI.FloatWindow and BT.UI.FloatWindow.SetScale then
         BT.UI.FloatWindow.SetScale(db.floatWindowScale)
+    end
+
+    -- 恢复浮动窗口可见性
+    if db.floatWindowVisible and BT.UI.FloatWindow then
+        BT.UI.FloatWindow.Open()
     end
 
     -- 斜杠命令
@@ -201,7 +211,53 @@ end
 
 -- 重置类型标签文字
 function BT.ResetTypeLabel(resetType)
-    if resetType == "daily"  then return "|cff55ff55[日]|r" end
-    if resetType == "weekly" then return "|cffffaa00[周]|r" end
+    if resetType == "daily"  then return CreateAtlasMarkup("quest-recurring-available", 14, 14) end
+    if resetType == "weekly" then return CreateAtlasMarkup("quest-wrapper-available",   14, 14) end
     return ""
 end
+
+-- 链接插入支持：Shift+点击物品/成就时将链接重定向到当前聚焦的 BT 输入框
+BT.activeLinkEditBox = nil
+
+local function BT_InsertLink(link)
+    if BT.activeLinkEditBox and BT.activeLinkEditBox:IsVisible() then
+        BT.activeLinkEditBox:Insert(link)
+    end
+end
+
+-- 防抖：WoW 存在 bug 会连续调用两次
+local btLinkDebounce = true
+local btLinkHook = function(link)
+    if btLinkDebounce then
+        btLinkDebounce = false
+        C_Timer.After(0.1, function() btLinkDebounce = true end)
+        BT_InsertLink(link)
+    end
+end
+
+-- WoW Retail 用 ChatFrameUtil.InsertLink，老版本用 ChatEdit_InsertLink
+if type(ChatFrameUtil) == "table" and type(ChatFrameUtil.InsertLink) == "function" then
+    hooksecurefunc(ChatFrameUtil, "InsertLink", btLinkHook)
+else
+    hooksecurefunc("ChatEdit_InsertLink", btLinkHook)
+end
+
+-- 副本日志链接需单独 hook（EncounterJournal 是按需加载的插件）
+hooksecurefunc(C_AddOns, "LoadAddOn", function(name)
+    if name ~= "Blizzard_EncounterJournal" or not EncounterJournal then return end
+    if EncounterJournal_OnClick then
+        hooksecurefunc("EncounterJournal_OnClick", function(self)
+            if IsModifiedClick("CHATLINK") and self.link then
+                BT_InsertLink(self.link)
+            end
+        end)
+    end
+    if EncounterJournalBossButton_OnClick then
+        hooksecurefunc("EncounterJournalBossButton_OnClick", function(self)
+            if IsModifiedClick("CHATLINK") and self.link then
+                BT_InsertLink(self.link)
+            end
+        end)
+    end
+end)
+

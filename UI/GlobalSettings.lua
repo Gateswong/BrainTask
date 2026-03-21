@@ -14,6 +14,8 @@ local frame = BT.CreateBackdropFrame("Frame", "BrainTaskGlobalSettings", UIParen
 frame:SetPoint("CENTER")
 frame:SetFrameStrata("DIALOG")
 frame:EnableMouse(true)
+frame:SetToplevel(true)
+frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
 
 -- 标题栏
@@ -34,11 +36,12 @@ titleFS:SetText("|cff55aaff全局设置|r")
 local closeBtn = CreateFrame("Button", nil, titleBar)
 closeBtn:SetSize(20, 20)
 closeBtn:SetPoint("RIGHT", titleBar, "RIGHT", -8, 0)
-local cX = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-cX:SetAllPoints() cX:SetText("X") cX:SetTextColor(0.6, 0.6, 0.65)
+local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
+closeTex:SetAllPoints()
+closeTex:SetAtlas("uitools-icon-close")
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
-closeBtn:SetScript("OnEnter", function() cX:SetTextColor(1, 0.3, 0.3) end)
-closeBtn:SetScript("OnLeave", function() cX:SetTextColor(0.6, 0.6, 0.65) end)
+closeBtn:SetScript("OnEnter", function() closeTex:SetVertexColor(1, 0.3, 0.3) end)
+closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
 
 -- ── 轮询间隔 ─────────────────────────────────────────────────────────────
 

@@ -33,6 +33,8 @@ local frame = BT.CreateBackdropFrame("Frame", "BrainTaskDashboard", UIParent, WI
 frame:SetPoint("CENTER")
 frame:SetFrameStrata("MEDIUM")
 frame:EnableMouse(true)
+frame:SetToplevel(true)
+frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
 
 -- ── 顶部工具栏 ────────────────────────────────────────────────────────────
@@ -57,13 +59,12 @@ titleFS:SetText("|cff55aaffBrainTask|r Dashboard")
 local closeBtn = CreateFrame("Button", nil, topBar)
 closeBtn:SetSize(24, 24)
 closeBtn:SetPoint("RIGHT", topBar, "RIGHT", -8, 0)
-local closeX = closeBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-closeX:SetAllPoints()
-closeX:SetText("X")
-closeX:SetTextColor(0.6, 0.6, 0.65)
+local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
+closeTex:SetAllPoints()
+closeTex:SetAtlas("uitools-icon-close")
 closeBtn:SetScript("OnClick", function() frame:Hide() end)
-closeBtn:SetScript("OnEnter", function() closeX:SetTextColor(1, 0.3, 0.3) end)
-closeBtn:SetScript("OnLeave", function() closeX:SetTextColor(0.6, 0.6, 0.65) end)
+closeBtn:SetScript("OnEnter", function() closeTex:SetVertexColor(1, 0.3, 0.3) end)
+closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
 
 -- ── 底部操作栏 ────────────────────────────────────────────────────────────
 
@@ -87,13 +88,13 @@ globalSettingsBtn:SetScript("OnClick", function()
     if BT.UI.GlobalSettings then BT.UI.GlobalSettings.Open() end
 end)
 
-local settingsBtn = BT.CreateButton(botBar, "管理分类", 100, 26)
+local settingsBtn = BT.CreateButton(botBar, "分类管理", 100, 26)
 settingsBtn:SetPoint("RIGHT", globalSettingsBtn, "LEFT", -8, 0)
 settingsBtn:SetScript("OnClick", function()
     if BT.UI.Settings then BT.UI.Settings.Open() end
 end)
 
-local sortCharsBtn = BT.CreateButton(botBar, "角色排序", 90, 26)
+local sortCharsBtn = BT.CreateButton(botBar, "角色管理", 90, 26)
 sortCharsBtn:SetPoint("RIGHT", settingsBtn, "LEFT", -8, 0)
 sortCharsBtn:SetScript("OnClick", function()
     if BT.UI.SortChars then BT.UI.SortChars.Open() end
@@ -300,6 +301,7 @@ end)
 -- ── Shift 模式：统一控制编辑/删除按钮可见性 ──────────────────────────────
 
 local shiftButtons    = {}
+local nonShiftLabels  = {}
 local lastShiftState  = false
 
 local shiftUpdater = CreateFrame("Frame", nil, frame)
@@ -309,6 +311,9 @@ shiftUpdater:SetScript("OnUpdate", function()
     lastShiftState = shift
     for _, btn in ipairs(shiftButtons) do
         btn:SetShown(shift)
+    end
+    for _, lbl in ipairs(nonShiftLabels) do
+        lbl:SetShown(not shift)
     end
 end)
 
@@ -558,9 +563,13 @@ frame:SetScript("OnUpdate", function()
         return
     end
 
-    local scale = UIParent:GetEffectiveScale()
-    local mx, my = GetCursorPosition()
-    mx, my = mx / scale, my / scale
+    local uiScale    = UIParent:GetEffectiveScale()
+    local rawX, rawY = GetCursorPosition()
+    -- Ghost 锚定 UIParent，用 UIParent 坐标系
+    local mx, my = rawX / uiScale, rawY / uiScale
+    -- 命中测试对比 item frame 的 GetTop/GetBottom，需用 Dashboard 自身的有效缩放
+    local hitScale = frame:GetEffectiveScale()
+    local hy       = rawY / hitScale
 
     -- 移动 ghost
     dragGhost:ClearAllPoints()
@@ -575,9 +584,9 @@ frame:SetScript("OnUpdate", function()
         local f = item.frame
         if f:IsVisible() then
             local top, bot = f:GetTop(), f:GetBottom()
-            if top and bot and my >= bot and my <= top then
+            if top and bot and hy >= bot and hy <= top then
                 hitIdx   = i
-                hitUpper = (my > (top + bot) / 2)
+                hitUpper = (hy > (top + bot) / 2)
                 break
             end
         end
@@ -638,15 +647,18 @@ frame:SetScript("OnUpdate", function()
         dropTarget = { afterID = afterTodoID, catID = targetCatID }
     end
 
-    -- 指示线 Y 位置
-    local lineY = (insertAfterIdx == 0) and items[1].frame:GetTop()
-                                         or items[insertAfterIdx].frame:GetBottom()
-    local lineLeft  = (dragState.items == dragItemsLeft) and leftArea:GetLeft()  or rightArea:GetLeft()
-    local lineRight = (dragState.items == dragItemsLeft) and leftArea:GetRight() or rightArea:GetRight()
-
+    -- 指示线：锚定到行 frame 本身，避免坐标系依赖
+    local refFrame = (insertAfterIdx == 0) and items[1].frame or items[insertAfterIdx].frame
+    local refAnchor = (insertAfterIdx == 0) and "TOPLEFT" or "BOTTOMLEFT"
+    local isLeft = (dragState.items == dragItemsLeft)
     dropLine:ClearAllPoints()
-    dropLine:SetPoint("TOPLEFT",  UIParent, "BOTTOMLEFT", lineLeft,  lineY)
-    dropLine:SetPoint("TOPRIGHT", UIParent, "BOTTOMLEFT", lineRight, lineY)
+    dropLine:SetPoint("TOPLEFT", refFrame, refAnchor, 0, 0)
+    if isLeft then
+        dropLine:SetPoint("TOPRIGHT", refFrame,
+            (insertAfterIdx == 0) and "TOPRIGHT" or "BOTTOMRIGHT", 0, 0)
+    else
+        dropLine:SetWidth(LABEL_W)
+    end
     dropLine:Show()
 end)
 
@@ -680,6 +692,15 @@ local function RefreshLeftColumn(filterText)
     local y = 0
     local lastCat = -1
 
+    -- 预计算每个分类的完成统计
+    local catStats = {}
+    for _, todo in ipairs(todos) do
+        local cid = todo.categoryID or 0
+        if not catStats[cid] then catStats[cid] = { total=0, done=0 } end
+        catStats[cid].total = catStats[cid].total + 1
+        if BT.Data.GetWarbandCompleted(todo.id) then catStats[cid].done = catStats[cid].done + 1 end
+    end
+
     for _, todo in ipairs(todos) do
         local matches = not (filterText and filterText ~= "") or
             string.find(string.lower(todo.title), string.lower(filterText), 1, true)
@@ -700,6 +721,11 @@ local function RefreshLeftColumn(filterText)
             catFS:SetTextColor(unpack(BT.COLORS.accent))
             local catTitle = BT.Data.GetCategoryTitle(todo.categoryID)
             catFS:SetText(catTitle)
+            local st = catStats[todo.categoryID or 0] or { total=0, done=0 }
+            local stFS = catRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            stFS:SetPoint("RIGHT", catRow, "RIGHT", -8, 0)
+            stFS:SetJustifyH("RIGHT")
+            stFS:SetText("|cff666666" .. st.done .. "/" .. st.total .. "|r")
             MakeDragTarget(catRow, "category", todo.categoryID, nil, nil, catTitle, dragItemsLeft)
             table.insert(dragItemsLeft, { type="category", id=todo.categoryID, frame=catRow })
             table.insert(leftRows, catRow)
@@ -783,12 +809,11 @@ local function RefreshLeftColumn(filterText)
         local editBtn = CreateFrame("Button", nil, row)
         editBtn:SetSize(18, 18)
         editBtn:SetPoint("RIGHT", row, "RIGHT", -20, 0)
-        local editFS = editBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        editFS:SetAllPoints()
-        editFS:SetText("E")
-        editFS:SetTextColor(0.6, 0.6, 0.7)
-        editBtn:SetScript("OnEnter", function() editFS:SetTextColor(0.3, 0.7, 1) end)
-        editBtn:SetScript("OnLeave", function() editFS:SetTextColor(0.6, 0.6, 0.7) end)
+        local editTex = editBtn:CreateTexture(nil, "ARTWORK")
+        editTex:SetAllPoints()
+        editTex:SetAtlas("lorewalking-map-icon")
+        editBtn:SetScript("OnEnter", function() editTex:SetVertexColor(0.3, 0.7, 1) end)
+        editBtn:SetScript("OnLeave", function() editTex:SetVertexColor(1, 1, 1) end)
         editBtn:SetScript("OnClick", function()
             DB.OpenTodoForm("warband", todo.id)
         end)
@@ -798,12 +823,11 @@ local function RefreshLeftColumn(filterText)
         local delBtn = CreateFrame("Button", nil, row)
         delBtn:SetSize(18, 18)
         delBtn:SetPoint("RIGHT", row, "RIGHT", -4, 0)
-        local delFS = delBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        delFS:SetAllPoints()
-        delFS:SetText("X")
-        delFS:SetTextColor(0.6, 0.4, 0.4)
-        delBtn:SetScript("OnEnter", function() delFS:SetTextColor(1, 0.3, 0.3) end)
-        delBtn:SetScript("OnLeave", function() delFS:SetTextColor(0.6, 0.4, 0.4) end)
+        local delTex = delBtn:CreateTexture(nil, "ARTWORK")
+        delTex:SetAllPoints()
+        delTex:SetAtlas("SCRAP-activated")
+        delBtn:SetScript("OnEnter", function() delTex:SetVertexColor(1, 0.3, 0.3) end)
+        delBtn:SetScript("OnLeave", function() delTex:SetVertexColor(1, 1, 1) end)
         delBtn:SetScript("OnClick", function()
             DB.ConfirmDelete(todo.id)
         end)
@@ -822,6 +846,27 @@ local function RefreshLeftColumn(filterText)
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
         end
+
+        -- 超链接支持（标题中的物品/成就链接可点击）
+        row:SetHyperlinksEnabled(true)
+        row:SetScript("OnHyperlinkClick", function(self, link, text, button)
+            SetItemRef(link, text, button)
+        end)
+        row:SetScript("OnHyperlinkEnter", function(self, link, text)
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+            GameTooltip:SetHyperlink(link)
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnHyperlinkLeave", function(self)
+            GameTooltip:Hide()
+            if todo.details and todo.details ~= "" then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:ClearLines()
+                GameTooltip:AddLine(todo.title, 1, 1, 1)
+                GameTooltip:AddLine(todo.details, 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end
+        end)
 
         MakeDragTarget(row, "todo", todo.id, todo.categoryID, "warband", todo.title, dragItemsLeft)
         table.insert(dragItemsLeft, { type="todo", id=todo.id, catID=todo.categoryID, frame=row })
@@ -858,17 +903,32 @@ local function RefreshRightColumn(filterText)
     if ck and BrainTaskDB.knownChars[ck] then
         table.insert(chars, { key = ck, info = BrainTaskDB.knownChars[ck] })
     end
-    -- 按 charOrder 顺序添加其余角色
+    -- 按 charOrder 顺序添加其余角色（跳过隐藏的）
+    local hidden = BrainTaskDB.hiddenChars or {}
     for _, k in ipairs(BrainTaskDB.charOrder or {}) do
-        if k ~= ck and BrainTaskDB.knownChars[k] then
+        if k ~= ck and BrainTaskDB.knownChars[k] and not hidden[k] then
             table.insert(chars, { key = k, info = BrainTaskDB.knownChars[k] })
         end
     end
-    -- 兜底：不在 charOrder 里的角色
+    -- 兜底：不在 charOrder 里的角色（跳过隐藏的）
     for k, info in pairs(BrainTaskDB.knownChars) do
         local seen = false
         for _, c in ipairs(chars) do if c.key == k then seen = true; break end end
-        if not seen then table.insert(chars, { key = k, info = info }) end
+        if not seen and not hidden[k] then table.insert(chars, { key = k, info = info }) end
+    end
+
+    -- 预计算每个角色的完成统计
+    local charStats = {}
+    for _, charEntry in ipairs(chars) do
+        local ck = charEntry.key
+        local enabled, done = 0, 0
+        for _, t in ipairs(todos) do
+            if t.enabledChars and t.enabledChars[ck] then
+                enabled = enabled + 1
+                if BT.Data.GetCharCompleted(t.id, ck) then done = done + 1 end
+            end
+        end
+        charStats[ck] = { enabled=enabled, done=done }
     end
 
     -- 角色列头：当前角色固定，其余进入横向滚动区
@@ -885,11 +945,11 @@ local function RefreshRightColumn(filterText)
         cell:SetPoint("BOTTOMLEFT", cellParent, "BOTTOMLEFT", cellX, 2)
         local nameFS = cell:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         nameFS:SetWidth(CELL_W)
-        nameFS:SetHeight(HEAD_H - 4)
-        nameFS:SetPoint("CENTER", cell, "CENTER")
+        nameFS:SetHeight(14)
+        nameFS:SetPoint("TOP", cell, "TOP", 0, -4)
         nameFS:SetText(charEntry.info.name or charEntry.key)
         nameFS:SetJustifyH("CENTER")
-        nameFS:SetJustifyV("MIDDLE")
+        nameFS:SetJustifyV("TOP")
         nameFS:SetWordWrap(false)
         local classKey = charEntry.info and charEntry.info.class
         local clr = classKey and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classKey]
@@ -898,6 +958,13 @@ local function RefreshRightColumn(filterText)
         else
             nameFS:SetTextColor(unpack(isCurrent and BT.COLORS.accent or BT.COLORS.textNormal))
         end
+        local cst = charStats[charEntry.key] or { enabled=0, done=0 }
+        local cstFS = cell:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        cstFS:SetWidth(CELL_W)
+        cstFS:SetHeight(12)
+        cstFS:SetPoint("TOP", nameFS, "BOTTOM", 0, -1)
+        cstFS:SetJustifyH("CENTER")
+        cstFS:SetText("|cff666666" .. cst.done .. "/" .. cst.enabled .. "|r")
         cell:Show()
         table.insert(charHeadCells, cell)
     end
@@ -949,6 +1016,20 @@ local function RefreshRightColumn(filterText)
         titleFS:SetText(todo.title)
         titleFS:SetTextColor(unpack(BT.COLORS.textNormal))
 
+        -- 超链接支持（标题中的物品/成就链接可点击）
+        row:SetHyperlinksEnabled(true)
+        row:SetScript("OnHyperlinkClick", function(self, link, text, button)
+            SetItemRef(link, text, button)
+        end)
+        row:SetScript("OnHyperlinkEnter", function(self, link, text)
+            GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+            GameTooltip:SetHyperlink(link)
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnHyperlinkLeave", function(self)
+            GameTooltip:Hide()
+        end)
+
         -- 重置类型标签（[日]/[周]），与战团列保持相同布局（editB 左侧 6px 间距）
         local resetFSR = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         resetFSR:SetPoint("RIGHT", row, "LEFT", LABEL_W - 42, 0)
@@ -958,10 +1039,11 @@ local function RefreshRightColumn(filterText)
         -- 编辑/删除（Shift 时可见）
         local editB = CreateFrame("Button", nil, row)
         editB:SetSize(16, 16)
-        local eFS = editB:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        eFS:SetAllPoints() eFS:SetText("E") eFS:SetTextColor(0.5, 0.5, 0.6)
-        editB:SetScript("OnEnter", function() eFS:SetTextColor(0.3, 0.7, 1) end)
-        editB:SetScript("OnLeave", function() eFS:SetTextColor(0.5, 0.5, 0.6) end)
+        local eTex = editB:CreateTexture(nil, "ARTWORK")
+        eTex:SetAllPoints()
+        eTex:SetAtlas("lorewalking-map-icon")
+        editB:SetScript("OnEnter", function() eTex:SetVertexColor(0.3, 0.7, 1) end)
+        editB:SetScript("OnLeave", function() eTex:SetVertexColor(1, 1, 1) end)
         editB:SetScript("OnClick", function() DB.OpenTodoForm("character", todo.id) end)
         editB:Hide()
         table.insert(shiftButtons, editB)
@@ -970,13 +1052,31 @@ local function RefreshRightColumn(filterText)
         delB:SetSize(16, 16)
         delB:SetPoint("RIGHT", row, "LEFT", LABEL_W - 2, 0)
         editB:SetPoint("RIGHT", delB, "LEFT", -2, 0)
-        local dFS = delB:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        dFS:SetAllPoints() dFS:SetText("X") dFS:SetTextColor(0.6, 0.4, 0.4)
-        delB:SetScript("OnEnter", function() dFS:SetTextColor(1, 0.3, 0.3) end)
-        delB:SetScript("OnLeave", function() dFS:SetTextColor(0.6, 0.4, 0.4) end)
+        local dTex = delB:CreateTexture(nil, "ARTWORK")
+        dTex:SetAllPoints()
+        dTex:SetAtlas("SCRAP-activated")
+        delB:SetScript("OnEnter", function() dTex:SetVertexColor(1, 0.3, 0.3) end)
+        delB:SetScript("OnLeave", function() dTex:SetVertexColor(1, 1, 1) end)
         delB:SetScript("OnClick", function() DB.ConfirmDelete(todo.id) end)
         delB:Hide()
         table.insert(shiftButtons, delB)
+
+        -- 多角色完成进度（非 Shift 时显示）
+        local enabledCount, doneCount = 0, 0
+        for _, c in ipairs(chars) do
+            if todo.enabledChars and todo.enabledChars[c.key] then
+                enabledCount = enabledCount + 1
+                if BT.Data.GetCharCompleted(todo.id, c.key) then
+                    doneCount = doneCount + 1
+                end
+            end
+        end
+        local statsLbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        statsLbl:SetWidth(40)
+        statsLbl:SetPoint("CENTER", row, "LEFT", LABEL_W - 19, 0)
+        statsLbl:SetJustifyH("CENTER")
+        statsLbl:SetText("|cff666666" .. doneCount .. "/" .. enabledCount .. "|r")
+        table.insert(nonShiftLabels, statsLbl)
 
         -- 角色格子：当前角色固定，其余进入横向滚动区
         local rowClipContent = nil
@@ -1093,8 +1193,9 @@ end
 -- ── 顶部筛选框 ────────────────────────────────────────────────────────────
 
 local filterBox = CreateFrame("EditBox", nil, topBar, "BackdropTemplate")
-filterBox:SetSize(180, 22)
+filterBox:SetSize(200, 22)
 filterBox:SetPoint("RIGHT", closeBtn, "LEFT", -10, 0)
+filterBox:SetTextInsets(4, 22, 0, 0)
 filterBox:SetBackdrop(BT.BACKDROP)
 filterBox:SetBackdropColor(0.10, 0.10, 0.14, 1)
 filterBox:SetBackdropBorderColor(unpack(BT.COLORS.border))
@@ -1102,6 +1203,20 @@ filterBox:SetFont("Fonts/FRIZQT__.TTF", 11, "")
 filterBox:SetTextColor(0.9, 0.9, 0.9)
 filterBox:SetAutoFocus(false)
 filterBox:SetMaxLetters(64)
+
+local clearBtn = CreateFrame("Button", nil, filterBox)
+clearBtn:SetSize(18, 18)
+clearBtn:SetPoint("RIGHT", filterBox, "RIGHT", -2, 0)
+local clearTex = clearBtn:CreateTexture(nil, "ARTWORK")
+clearTex:SetAllPoints()
+clearTex:SetAtlas("uitools-icon-close")
+clearTex:SetAlpha(0.4)
+clearBtn:SetScript("OnEnter", function() clearTex:SetAlpha(1) end)
+clearBtn:SetScript("OnLeave", function() clearTex:SetAlpha(0.4) end)
+clearBtn:SetScript("OnClick", function()
+    filterBox:SetText("")
+    filterBox:ClearFocus()
+end)
 
 local filterHint = filterBox:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
 filterHint:SetPoint("LEFT", filterBox, "LEFT", 6, 0)
@@ -1140,11 +1255,12 @@ formTitle:SetTextColor(unpack(BT.COLORS.textTitle))
 local formClose = CreateFrame("Button", nil, formFrame)
 formClose:SetSize(20, 20)
 formClose:SetPoint("TOPRIGHT", formFrame, "TOPRIGHT", -8, -8)
-local fcX = formClose:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-fcX:SetAllPoints() fcX:SetText("X") fcX:SetTextColor(0.6, 0.6, 0.65)
+local fcTex = formClose:CreateTexture(nil, "ARTWORK")
+fcTex:SetAllPoints()
+fcTex:SetAtlas("uitools-icon-close")
 formClose:SetScript("OnClick", function() formFrame:Hide() end)
-formClose:SetScript("OnEnter", function() fcX:SetTextColor(1, 0.3, 0.3) end)
-formClose:SetScript("OnLeave", function() fcX:SetTextColor(0.6, 0.6, 0.65) end)
+formClose:SetScript("OnEnter", function() fcTex:SetVertexColor(1, 0.3, 0.3) end)
+formClose:SetScript("OnLeave", function() fcTex:SetVertexColor(1, 1, 1) end)
 
 local function MakeFieldLabel(parent, text, yOffset)
     local lbl = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -1173,6 +1289,10 @@ local function MakeEditBox(parent, yOffset, w, h, multiLine)
         eb:SetMaxLetters(256)
         eb:SetScript("OnTabPressed",    function(self) self:ClearFocus() end)
         eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnEditFocusGained", function(self) BT.activeLinkEditBox = self end)
+        eb:SetScript("OnEditFocusLost",   function(self)
+            if BT.activeLinkEditBox == self then BT.activeLinkEditBox = nil end
+        end)
         return eb
     end
     local eb = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
@@ -1186,6 +1306,10 @@ local function MakeEditBox(parent, yOffset, w, h, multiLine)
     eb:SetAutoFocus(false)
     eb:SetMaxLetters(256)
     eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    eb:SetScript("OnEditFocusGained", function(self) BT.activeLinkEditBox = self end)
+    eb:SetScript("OnEditFocusLost",   function(self)
+        if BT.activeLinkEditBox == self then BT.activeLinkEditBox = nil end
+    end)
     return eb
 end
 
@@ -1206,7 +1330,7 @@ local selectedCatID = nil
 local catDropList = CreateFrame("Frame", nil, formFrame)
 catDropList:SetSize(200, 1)
 catDropList:SetPoint("TOPLEFT", catDropBtn, "BOTTOMLEFT", 0, -2)
-catDropList:SetFrameStrata("DIALOG")
+catDropList:SetFrameStrata("FULLSCREEN_DIALOG")
 catDropList:EnableMouse(true)
 -- 纯色不透明背景（sublayer 0 = 边框色，sublayer 1 = 内部填充色，内缩 1px 显示边框）
 local _cdBorder = catDropList:CreateTexture(nil, "BACKGROUND", nil, 0)
@@ -1245,6 +1369,7 @@ local function RefreshCatDropList()
             selectedCatID = catID
             catDropBtn.label:SetText(catTitle)
             catDropList:Hide()
+            if UpdateSaveBtn then UpdateSaveBtn() end
         end)
         item:Show()
         listH = listH + 22
@@ -1360,6 +1485,8 @@ formFrame.bossEncounterIDBox:Hide()
 local formEditingID  = nil
 local formEditScope  = nil
 
+local UpdateSaveBtn  -- forward declaration
+
 local function ResetForm()
     fTitle:SetText("")
     fDetails:SetText("")
@@ -1379,6 +1506,7 @@ local function ResetForm()
     formFrame.bossEncounterIDLabel:Hide()
     formEditingID = nil
     formEditScope = nil
+    if UpdateSaveBtn then UpdateSaveBtn() end
 end
 
 local saveBtn = BT.CreateButton(formFrame, "保存", 100, 26)
@@ -1422,6 +1550,14 @@ saveBtn:SetScript("OnClick", function()
     formFrame:Hide()
     ResetForm()
 end)
+
+UpdateSaveBtn = function()
+    local ok = (fTitle:GetText() ~= "") and (selectedCatID ~= nil)
+    saveBtn:SetEnabled(ok)
+    saveBtn.label:SetTextColor(ok and 1 or 0.45, ok and 1 or 0.45, ok and 1 or 0.45)
+end
+
+fTitle:SetScript("OnTextChanged", function() UpdateSaveBtn() end)
 
 local cancelBtn = BT.CreateButton(formFrame, "取消", 80, 26)
 cancelBtn:SetPoint("RIGHT", saveBtn, "LEFT", -8, 0)
@@ -1514,12 +1650,14 @@ function DB.OpenTodoForm(scope, editID)
             end
         end
     end
+    UpdateSaveBtn()
     formFrame:Show()
 end
 
 function DB.Refresh()
     if not frame:IsVisible() then return end
     shiftButtons   = {}
+    nonShiftLabels = {}
     lastShiftState = not IsShiftKeyDown()  -- 强制 OnUpdate 重新评估一次
     local filterText = filterBox:GetText()
     RefreshLeftColumn(filterText)
@@ -1547,6 +1685,10 @@ end
 
 function DB.Close()
     frame:Hide()
+end
+
+function DB.Toggle()
+    if frame:IsVisible() then DB.Close() else DB.Open() end
 end
 
 function DB.SetScale(v)
