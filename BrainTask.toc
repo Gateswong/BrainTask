@@ -2,7 +2,7 @@
 ## Title: BrainTask
 ## Notes: Task management for warband and all your characters!
 ## Author: ネ申イ山
-## Version: 1.0.0
+## Version: 1.0.1
 ## SavedVariables: BrainTaskDB
 
 Locale.lua
