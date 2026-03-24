@@ -30,6 +30,12 @@ titleBar:SetBackdropColor(unpack(BT.COLORS.header))
 titleBar:SetBackdropBorderColor(unpack(BT.COLORS.border))
 
 BT.MakeDraggable(frame, titleBar)
+titleBar:SetScript("OnDragStop", function()
+    frame:StopMovingOrSizing()
+    if BrainTaskDB then
+        BrainTaskDB.floatWindowPos = { x = frame:GetLeft(), y = frame:GetTop() }
+    end
+end)
 
 local titleText = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
 titleText:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
@@ -70,6 +76,47 @@ local content = CreateFrame("Frame", nil, scrollFrame)
 content:SetWidth(scrollFrame:GetWidth() - 4)
 content:SetHeight(1)
 scrollFrame:SetScrollChild(content)
+
+-- 缩放手柄（右下角）
+frame:SetResizable(true)
+frame:SetResizeBounds(160, 200)
+
+local resizeHandle = CreateFrame("Frame", nil, frame)
+resizeHandle:SetSize(16, 16)
+resizeHandle:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+resizeHandle:SetFrameLevel(frame:GetFrameLevel() + 5)
+resizeHandle:EnableMouse(true)
+
+local resizeTex = resizeHandle:CreateTexture(nil, "OVERLAY")
+resizeTex:SetAllPoints()
+resizeTex:SetColorTexture(0.4, 0.4, 0.5, 0.4)
+
+resizeHandle:SetScript("OnEnter", function()
+    resizeTex:SetColorTexture(0.5, 0.7, 1.0, 0.6)
+end)
+resizeHandle:SetScript("OnLeave", function()
+    resizeTex:SetColorTexture(0.4, 0.4, 0.5, 0.4)
+end)
+resizeHandle:SetScript("OnMouseDown", function(self, btn)
+    if btn == "LeftButton" then
+        local x = frame:GetLeft()
+        local y = frame:GetTop()
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y)
+        frame:StartSizing("BOTTOMRIGHT")
+    end
+end)
+resizeHandle:SetScript("OnMouseUp", function()
+    frame:StopMovingOrSizing()
+    content:SetWidth(math.max(1, scrollFrame:GetWidth() - 4))
+    if BrainTaskDB then
+        BrainTaskDB.floatWindowSize = { w = frame:GetWidth(), h = frame:GetHeight() }
+    end
+end)
+
+frame:SetScript("OnSizeChanged", function()
+    content:SetWidth(math.max(1, scrollFrame:GetWidth() - 4))
+end)
 
 -- ── 行池（复用 frame 对象）───────────────────────────────────────────────
 
@@ -318,7 +365,21 @@ function FW.Toggle()
     end
 end
 
+local sizeRestored = false
 function FW.Open()
+    if not sizeRestored and BrainTaskDB then
+        sizeRestored = true
+        if BrainTaskDB.floatWindowSize then
+            local sz = BrainTaskDB.floatWindowSize
+            frame:SetSize(sz.w or WIN_W, sz.h or WIN_H)
+        end
+        if BrainTaskDB.floatWindowPos then
+            local pos = BrainTaskDB.floatWindowPos
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", pos.x, pos.y)
+        end
+        FW.SetPositionLocked(BrainTaskDB.floatWindowLocked or false)
+    end
     frame:Show()
     FW.Refresh()
     if BrainTaskDB then BrainTaskDB.floatWindowVisible = true end
@@ -331,4 +392,23 @@ end
 
 function FW.SetScale(v)
     frame:SetScale(math.max(0.5, math.min(2.0, v or 1.0)))
+end
+
+function FW.SetLocked(locked)
+    resizeHandle:SetShown(not locked)
+end
+
+function FW.SetPositionLocked(locked)
+    if locked then
+        titleBar:SetScript("OnDragStart", nil)
+    else
+        titleBar:SetScript("OnDragStart", function() frame:StartMoving() end)
+        titleBar:SetScript("OnDragStop", function()
+            frame:StopMovingOrSizing()
+            if BrainTaskDB then
+                BrainTaskDB.floatWindowPos = { x = frame:GetLeft(), y = frame:GetTop() }
+            end
+        end)
+    end
+    if BrainTaskDB then BrainTaskDB.floatWindowLocked = locked end
 end

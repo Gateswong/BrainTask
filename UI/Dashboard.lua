@@ -20,7 +20,9 @@ local SetLocked
 local lockState              = false
 local isDraggingDivider      = false
 local isDraggingRightDivider = false
-local lockCheckBg, lockCheckMark  -- 在 botBar 区块中赋值
+local lockCheckBg, lockCheckMark          -- 在 botBar 区块中赋值
+local floatLockCheckBg, floatLockCheckMark
+local floatLockState = false
 local resizeHandle                -- 在布局更新区块中赋值
 local rightDivider                -- 右列标题宽度分割线
 local rightDividerLine
@@ -131,6 +133,50 @@ lockCb:SetScript("OnLeave", function()
 end)
 lockCb:SetScript("OnClick", function()
     SetLocked(not lockState)
+end)
+
+-- 锁定浮动窗口位置复选框
+local floatLockCb = CreateFrame("Button", nil, botBar)
+floatLockCb:SetSize(16, 16)
+floatLockCb:SetPoint("RIGHT", lockLabel, "LEFT", -14, 0)
+
+floatLockCheckBg = floatLockCb:CreateTexture(nil, "BACKGROUND")
+floatLockCheckBg:SetAllPoints()
+floatLockCheckBg:SetColorTexture(0.18, 0.18, 0.24, 1)
+
+floatLockCheckMark = floatLockCb:CreateTexture(nil, "OVERLAY")
+floatLockCheckMark:SetSize(14, 14)
+floatLockCheckMark:SetPoint("CENTER")
+floatLockCheckMark:SetTexture("Interface/Buttons/UI-CheckBox-Check")
+floatLockCheckMark:SetVertexColor(0.3, 0.9, 0.3, 1)
+floatLockCheckMark:Hide()
+
+local floatLockLabel = botBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+floatLockLabel:SetPoint("RIGHT", floatLockCb, "LEFT", -4, 0)
+floatLockLabel:SetText(BT.L.LBL_LOCK_FLOAT_POS)
+floatLockLabel:SetTextColor(unpack(BT.COLORS.textMuted))
+
+floatLockCb:SetScript("OnEnter", function() floatLockCheckBg:SetColorTexture(0.28, 0.28, 0.38, 1) end)
+floatLockCb:SetScript("OnLeave", function()
+    if floatLockState then
+        floatLockCheckBg:SetColorTexture(0.10, 0.24, 0.10, 1)
+    else
+        floatLockCheckBg:SetColorTexture(0.18, 0.18, 0.24, 1)
+    end
+end)
+floatLockCb:SetScript("OnClick", function()
+    floatLockState = not floatLockState
+    if floatLockState then
+        floatLockCheckBg:SetColorTexture(0.10, 0.24, 0.10, 1)
+        floatLockCheckMark:Show()
+    else
+        floatLockCheckBg:SetColorTexture(0.18, 0.18, 0.24, 1)
+        floatLockCheckMark:Hide()
+    end
+    if BrainTaskDB then BrainTaskDB.floatWindowLocked = floatLockState end
+    if BT.UI.FloatWindow and BT.UI.FloatWindow.SetPositionLocked then
+        BT.UI.FloatWindow.SetPositionLocked(floatLockState)
+    end
 end)
 
 -- ── 分隔线（左右两列之间，可拖拽）──────────────────────────────────────
@@ -369,6 +415,10 @@ SetLocked = function(locked)
     end
     local layout = BrainTaskDB and BrainTaskDB.dashboardLayout
     if layout then layout.locked = locked end
+    -- 同步浮动窗口锁定状态
+    if BT.UI.FloatWindow and BT.UI.FloatWindow.SetLocked then
+        BT.UI.FloatWindow.SetLocked(locked)
+    end
 end
 
 -- 分隔线拖拽脚本
@@ -1321,6 +1371,7 @@ local _flDetails = MakeFieldLabel(formFrame, BT.L.FIELD_DETAILS,     -92)
 local fDetails = MakeEditBox(formFrame, -108, 340, 50, true)
 
 local _flCat     = MakeFieldLabel(formFrame, BT.L.FIELD_CATEGORY,       -170)
+local UpdateSaveBtn  -- forward declaration（须在 RefreshCatDropList 之前声明，以便闭包捕获）
 
 -- 分类下拉（简单按钮实现）
 local catDropBtn = BT.CreateButton(formFrame, BT.L.SELECT_CATEGORY, 200, 24)
@@ -1484,8 +1535,6 @@ formFrame.bossEncounterIDBox:Hide()
 -- 保存按钮
 local formEditingID  = nil
 local formEditScope  = nil
-
-local UpdateSaveBtn  -- forward declaration
 
 local function ResetForm()
     fTitle:SetText("")
@@ -1713,6 +1762,19 @@ frame:SetScript("OnShow", function()
         UpdateLayout(layout.leftW or 400)        -- 内部末尾调用 UpdateRightLayout(LABEL_W)，此时 rightArea 已锚定
         SetLocked(layout.locked or false)
         initStage = false                        -- 恢复完成，解除对 OnSizeChanged 的屏蔽
+        -- 恢复浮动窗口位置锁定状态
+        local locked = BrainTaskDB.floatWindowLocked or false
+        floatLockState = locked
+        if locked then
+            floatLockCheckBg:SetColorTexture(0.10, 0.24, 0.10, 1)
+            floatLockCheckMark:Show()
+        else
+            floatLockCheckBg:SetColorTexture(0.18, 0.18, 0.24, 1)
+            floatLockCheckMark:Hide()
+        end
+        if BT.UI.FloatWindow and BT.UI.FloatWindow.SetPositionLocked then
+            BT.UI.FloatWindow.SetPositionLocked(locked)
+        end
     end
     DB.Refresh()
 end)

@@ -86,6 +86,8 @@ function BT.OnLogin()
     db.pollInterval    = db.pollInterval    or 15
     db.dashboardScale  = db.dashboardScale  or 1.0
     db.floatWindowScale = db.floatWindowScale or 1.0
+    db.floatWindowSize   = db.floatWindowSize   or { w = 280, h = 420 }
+    db.floatWindowLocked = db.floatWindowLocked or false
     db.hiddenChars     = db.hiddenChars     or {}
 
     -- 注册当前角色
