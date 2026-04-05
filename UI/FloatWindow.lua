@@ -118,6 +118,60 @@ frame:SetScript("OnSizeChanged", function()
     content:SetWidth(math.max(1, scrollFrame:GetWidth() - 4))
 end)
 
+-- ── 备注 Frame（单例）────────────────────────────────────────────────────
+
+local noteExpanded = true
+local noteFrame    = nil
+
+local function EnsureNoteFrame(parent)
+    if noteFrame then
+        noteFrame:SetParent(parent)
+        return noteFrame
+    end
+    noteFrame = CreateFrame("Frame", nil, parent)
+    noteFrame:SetHyperlinksEnabled(true)
+
+    noteFrame.fs = noteFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    noteFrame.fs:SetPoint("TOPLEFT",  noteFrame, "TOPLEFT",  INDENT + 22, -2)
+    noteFrame.fs:SetPoint("TOPRIGHT", noteFrame, "TOPRIGHT", -6, -2)
+    noteFrame.fs:SetJustifyH("LEFT")
+    noteFrame.fs:SetWordWrap(true)
+    noteFrame.fs:SetNonSpaceWrap(true)
+
+    noteFrame:SetScript("OnHyperlinkClick", function(self, link, text, button)
+        SetItemRef(link, text, button)
+    end)
+    noteFrame:SetScript("OnHyperlinkEnter", function(self, link, text)
+        GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
+        GameTooltip:SetHyperlink(link)
+        GameTooltip:Show()
+    end)
+    noteFrame:SetScript("OnHyperlinkLeave", function(self)
+        GameTooltip:Hide()
+    end)
+
+    noteFrame:EnableMouse(true)
+    noteFrame:SetScript("OnMouseDown", function(self, btn)
+        if btn == "LeftButton" then
+            noteExpanded = not noteExpanded
+            FW.Refresh()
+        end
+    end)
+    noteFrame:SetScript("OnEnter", function(self)
+        if not noteExpanded and self.noteText and self.noteText ~= "" then
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:ClearLines()
+            GameTooltip:AddLine(self.noteText, 0.8, 0.8, 0.8, true)
+            GameTooltip:Show()
+        end
+    end)
+    noteFrame:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+    end)
+
+    return noteFrame
+end
+
 -- ── 行池（复用 frame 对象）───────────────────────────────────────────────
 
 local rowPool = {}
@@ -255,6 +309,7 @@ local function ClearContent()
     activeRows = {}
     for _, h in ipairs(activeHeads) do h:Hide() end
     activeHeads = {}
+    if noteFrame then noteFrame:Hide() end
 end
 
 local headerPool = {}
@@ -291,16 +346,43 @@ function FW.Refresh()
     local charKey = BT.charKey
     if not charKey then return end
 
-    local todos = BT.Data.GetTodosForChar(charKey)
-    if #todos == 0 then
-        content:SetHeight(40)
-        titleText:SetText("|cff55aaffBrainTask|r")
-        return
-    end
-
     local totalCount, doneCount = 0, 0
     local yOffset  = 0
     local lastCat  = -1
+
+    -- 角色备注（显示在所有事项之前）
+    local charNote = BT.Data.GetCharNote(charKey)
+    if charNote and charNote ~= "" then
+        local nf = EnsureNoteFrame(content)
+        nf.noteText = charNote
+        nf:ClearAllPoints()
+        nf:SetPoint("TOPLEFT",  content, "TOPLEFT",  0, -yOffset)
+        nf:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -yOffset)
+
+        if noteExpanded then
+            nf.fs:SetText(charNote)
+            nf.fs:SetTextColor(0.85, 0.85, 0.85)
+            -- 按换行符数量估算行数（GetNumLines 在首次渲染前不可靠）
+            local lineCount = 1
+            for _ in charNote:gmatch("\n") do lineCount = lineCount + 1 end
+            nf:SetHeight(lineCount * 14 + 6)
+        else
+            local firstLine = charNote:match("([^\n]*)")
+            nf.fs:SetText(firstLine)
+            nf.fs:SetTextColor(0.45, 0.45, 0.45)
+            nf:SetHeight(ROW_H)
+        end
+
+        nf:Show()
+        yOffset = yOffset + nf:GetHeight() + 2
+    end
+
+    local todos = BT.Data.GetTodosForChar(charKey)
+    if #todos == 0 then
+        content:SetHeight(math.max(yOffset + 10, 40))
+        titleText:SetText("|cff55aaffBrainTask|r")
+        return
+    end
 
     for _, entry in ipairs(todos) do
         local todo      = entry.todo

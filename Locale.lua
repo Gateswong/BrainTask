@@ -84,6 +84,12 @@ LOCALES["enUS"] = {
     LANG_LABEL          = "Interface Language",
     LANG_AUTO           = "Follow Game Language",
     LANG_RELOAD_HINT    = "UI reload required for changes to take effect",
+    -- Character note
+    SET_CHAR_NOTE       = "Set Note",
+    NOTE_DIALOG_TITLE   = "Character Note",
+    NOTE_SAVE           = "Save",
+    NOTE_CANCEL         = "Cancel",
+    NOTE_HEADER         = "Note",
 }
 
 -- ── Simplified Chinese / 简体中文 ─────────────────────────────────────────
@@ -152,6 +158,12 @@ LOCALES["zhCN"] = {
     LANG_LABEL          = "界面语言",
     LANG_AUTO           = "跟随游戏语言",
     LANG_RELOAD_HINT    = "更改语言后需重载界面生效",
+    -- 角色备注
+    SET_CHAR_NOTE       = "设置备注",
+    NOTE_DIALOG_TITLE   = "角色备注",
+    NOTE_SAVE           = "保存",
+    NOTE_CANCEL         = "取消",
+    NOTE_HEADER         = "备注",
 }
 
 -- ── Traditional Chinese / 繁體中文 ────────────────────────────────────────
@@ -220,6 +232,12 @@ LOCALES["zhTW"] = {
     LANG_LABEL          = "介面語言",
     LANG_AUTO           = "跟隨遊戲語言",
     LANG_RELOAD_HINT    = "更改語言後需重載介面生效",
+    -- 角色備註
+    SET_CHAR_NOTE       = "設置備註",
+    NOTE_DIALOG_TITLE   = "角色備註",
+    NOTE_SAVE           = "儲存",
+    NOTE_CANCEL         = "取消",
+    NOTE_HEADER         = "備註",
 }
 
 -- ── 所有 WoW 支持的语言列表（用于设置下拉菜单）──────────────────────────

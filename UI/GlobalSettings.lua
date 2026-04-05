@@ -17,6 +17,7 @@ frame:EnableMouse(true)
 frame:SetToplevel(true)
 frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
+tinsert(UISpecialFrames, "BrainTaskGlobalSettings")
 
 -- 标题栏
 local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")

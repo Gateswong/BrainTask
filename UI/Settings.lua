@@ -17,6 +17,7 @@ frame:EnableMouse(true)
 frame:SetToplevel(true)
 frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
+tinsert(UISpecialFrames, "BrainTaskSettings")
 
 -- 标题
 local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -74,6 +75,16 @@ confirmYes:SetPoint("BOTTOMRIGHT", confirmFrame, "BOTTOM", -4, 8)
 local confirmNo = BT.CreateButton(confirmFrame, BT.L.BTN_CANCEL, 90, 24)
 confirmNo:SetPoint("BOTTOMLEFT", confirmFrame, "BOTTOM", 4, 8)
 confirmNo:SetScript("OnClick", function() confirmFrame:Hide() end)
+
+confirmFrame:EnableKeyboard(true)
+confirmFrame:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+        self:SetPropagateKeyboardInput(false)
+        self:Hide()
+    else
+        self:SetPropagateKeyboardInput(true)
+    end
+end)
 
 local function TryDeleteCategory(catID)
     -- 检查是否有关联事项

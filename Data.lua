@@ -301,6 +301,19 @@ function Data.GetWarbandStats()
     return total, completed
 end
 
+-- ── 角色备注 ──────────────────────────────────────────────────────────────
+
+function Data.GetCharNote(charKey)
+    local d = db()
+    return d.charNotes and d.charNotes[charKey] or ""
+end
+
+function Data.SetCharNote(charKey, text)
+    local d = db()
+    d.charNotes = d.charNotes or {}
+    d.charNotes[charKey] = (text and text ~= "") and text or nil
+end
+
 -- ── UI 刷新广播 ───────────────────────────────────────────────────────────
 
 function Data.RefreshUI()

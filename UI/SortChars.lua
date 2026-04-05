@@ -20,6 +20,7 @@ frame:EnableMouse(true)
 frame:SetToplevel(true)
 frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
+tinsert(UISpecialFrames, "BrainTaskSortChars")
 
 -- 标题栏
 local titleBar = CreateFrame("Frame", nil, frame, "BackdropTemplate")
@@ -139,6 +140,150 @@ dragOverlay:SetScript("OnMouseUp", function()
     if BT.UI.Dashboard then BT.UI.Dashboard.Refresh() end
 end)
 
+-- ── 备注对话框 ────────────────────────────────────────────────────────────
+
+local noteDialog = nil
+local noteDialogEB = nil
+local noteDialogTitle = nil
+local noteDialogKey = nil
+
+local function EnsureNoteDialog()
+    if noteDialog then return end
+
+    noteDialog = BT.CreateBackdropFrame("Frame", "BrainTaskNoteDialog", UIParent, 320, 220)
+    noteDialog:SetPoint("CENTER")
+    noteDialog:SetFrameStrata("FULLSCREEN_DIALOG")
+    noteDialog:Hide()
+
+    -- 标题栏
+    local titleBar = CreateFrame("Frame", nil, noteDialog, "BackdropTemplate")
+    titleBar:SetHeight(28)
+    titleBar:SetPoint("TOPLEFT",  noteDialog, "TOPLEFT",  0, 0)
+    titleBar:SetPoint("TOPRIGHT", noteDialog, "TOPRIGHT", 0, 0)
+    titleBar:SetBackdrop(BT.BACKDROP)
+    titleBar:SetBackdropColor(unpack(BT.COLORS.header))
+    titleBar:SetBackdropBorderColor(unpack(BT.COLORS.border))
+    BT.MakeDraggable(noteDialog, titleBar)
+
+    noteDialogTitle = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    noteDialogTitle:SetPoint("LEFT", titleBar, "LEFT", 10, 0)
+    noteDialogTitle:SetPoint("RIGHT", titleBar, "RIGHT", -32, 0)
+    noteDialogTitle:SetJustifyH("LEFT")
+
+    local closeBtn = CreateFrame("Button", nil, titleBar)
+    closeBtn:SetSize(20, 20)
+    closeBtn:SetPoint("RIGHT", titleBar, "RIGHT", -6, 0)
+    local closeTex = closeBtn:CreateTexture(nil, "ARTWORK")
+    closeTex:SetAllPoints()
+    closeTex:SetAtlas("uitools-icon-close")
+    closeBtn:SetScript("OnClick", function() noteDialog:Hide() end)
+    closeBtn:SetScript("OnEnter", function() closeTex:SetVertexColor(1, 0.3, 0.3) end)
+    closeBtn:SetScript("OnLeave", function() closeTex:SetVertexColor(1, 1, 1) end)
+
+    -- 多行 EditBox（ScrollFrame 包裹）
+    local wrapper = CreateFrame("Frame", nil, noteDialog, "BackdropTemplate")
+    wrapper:SetSize(284, 120)
+    wrapper:SetPoint("TOP", noteDialog, "TOP", 0, -38)
+    wrapper:SetBackdrop(BT.BACKDROP)
+    wrapper:SetBackdropColor(0.06, 0.06, 0.09, 1)
+    wrapper:SetBackdropBorderColor(unpack(BT.COLORS.border))
+
+    local scrollFrame = CreateFrame("ScrollFrame", nil, wrapper, "InputScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT",     wrapper, "TOPLEFT",     3,  -3)
+    scrollFrame:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", -3,  3)
+    scrollFrame:HookScript("OnSizeChanged", function(self)
+        self.EditBox:SetWidth(self:GetWidth())
+    end)
+
+    local eb = scrollFrame.EditBox
+    eb:SetMaxLetters(500)
+    eb:SetFontObject("GameFontNormal")
+    eb:SetAutoFocus(false)
+    eb:SetTextColor(0.9, 0.9, 0.9)
+    eb:SetScript("OnTabPressed", function(self) self:ClearFocus() end)
+    eb:EnableMouse(true)
+    eb:HookScript("OnEditFocusGained", function(self) BT.activeLinkEditBox = self end)
+    eb:HookScript("OnEditFocusLost",   function(self)
+        if BT.activeLinkEditBox == self then BT.activeLinkEditBox = nil end
+    end)
+    eb:SetScript("OnTextChanged", function(self, userInput)
+        ScrollingEdit_OnTextChanged(self, scrollFrame)
+    end)
+    noteDialogEB = eb
+
+    -- 提示文字（无内容时显示）
+    local hintFS = wrapper:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    hintFS:SetPoint("TOPLEFT", wrapper, "TOPLEFT", 8, -8)
+    hintFS:SetTextColor(0.4, 0.4, 0.45)
+    hintFS:SetText("Shift+Click to insert item/spell/achievement links")
+    eb:SetScript("OnShow", function(self)
+        hintFS:SetShown(self:GetText() == "")
+    end)
+    eb:HookScript("OnTextChanged", function(self)
+        hintFS:SetShown(self:GetText() == "")
+    end)
+
+    -- 按钮行
+    local saveBtn = CreateFrame("Button", nil, noteDialog, "BackdropTemplate")
+    saveBtn:SetSize(80, 24)
+    saveBtn:SetPoint("BOTTOMRIGHT", noteDialog, "BOTTOMRIGHT", -16, 12)
+    saveBtn:SetBackdrop(BT.BACKDROP)
+    saveBtn:SetBackdropColor(0.12, 0.22, 0.12, 1)
+    saveBtn:SetBackdropBorderColor(unpack(BT.COLORS.border))
+    local saveTxt = saveBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    saveTxt:SetAllPoints()
+    saveTxt:SetText(BT.L.NOTE_SAVE)
+    saveBtn:SetScript("OnClick", function()
+        if noteDialogKey then
+            BT.Data.SetCharNote(noteDialogKey, noteDialogEB:GetText())
+            if BT.UI.FloatWindow and BT.UI.FloatWindow.Refresh then
+                BT.UI.FloatWindow.Refresh()
+            end
+        end
+        noteDialog:Hide()
+    end)
+    saveBtn:SetScript("OnEnter", function(self) self:SetBackdropColor(0.18, 0.32, 0.18, 1) end)
+    saveBtn:SetScript("OnLeave", function(self) self:SetBackdropColor(0.12, 0.22, 0.12, 1) end)
+
+    local cancelBtn = CreateFrame("Button", nil, noteDialog, "BackdropTemplate")
+    cancelBtn:SetSize(80, 24)
+    cancelBtn:SetPoint("RIGHT", saveBtn, "LEFT", -8, 0)
+    cancelBtn:SetBackdrop(BT.BACKDROP)
+    cancelBtn:SetBackdropColor(0.18, 0.18, 0.22, 1)
+    cancelBtn:SetBackdropBorderColor(unpack(BT.COLORS.border))
+    local cancelTxt = cancelBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    cancelTxt:SetAllPoints()
+    cancelTxt:SetText(BT.L.NOTE_CANCEL)
+    cancelBtn:SetScript("OnClick", function() noteDialog:Hide() end)
+    cancelBtn:SetScript("OnEnter", function(self) self:SetBackdropColor(0.26, 0.26, 0.32, 1) end)
+    cancelBtn:SetScript("OnLeave", function(self) self:SetBackdropColor(0.18, 0.18, 0.22, 1) end)
+
+    noteDialog:EnableKeyboard(true)
+    noteDialog:SetScript("OnKeyDown", function(self, key)
+        if key == "ESCAPE" then
+            self:SetPropagateKeyboardInput(false)
+            if noteDialogEB and noteDialogEB:HasFocus() then
+                noteDialogEB:ClearFocus()
+            else
+                self:Hide()
+            end
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
+end
+
+function SC.OpenNoteDialog(charKey)
+    EnsureNoteDialog()
+    noteDialogKey = charKey
+    local info = BrainTaskDB.knownChars and BrainTaskDB.knownChars[charKey]
+    local charName = (info and info.name) or charKey
+    noteDialogTitle:SetText("|cff55aaff" .. BT.L.NOTE_DIALOG_TITLE .. "|r  " .. charName)
+    noteDialogEB:SetText(BT.Data.GetCharNote(charKey))
+    noteDialog:Show()
+    C_Timer.After(0, function() noteDialogEB:SetFocus() end)
+end
+
 -- ── 渲染列表 ──────────────────────────────────────────────────────────────
 
 function SC.Refresh()
@@ -192,6 +337,24 @@ function SC.Refresh()
             visTex:SetAllPoints()
             visTex:SetAtlas(isHidden and "GM-icon-visibleDis-pressed" or "GM-icon-visible-hover")
             local capturedKey = key
+
+            -- 备注按钮（紧贴可见性按钮左侧）
+            local noteBtn = CreateFrame("Button", nil, row)
+            noteBtn:SetSize(20, 20)
+            noteBtn:SetPoint("RIGHT", visBtn, "LEFT", -4, 0)
+            local noteTex = noteBtn:CreateTexture(nil, "ARTWORK")
+            noteTex:SetAllPoints()
+            noteTex:SetAtlas("poi-workorders")
+            noteBtn:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_TOP")
+                GameTooltip:AddLine(BT.L.SET_CHAR_NOTE, 1, 1, 1)
+                GameTooltip:Show()
+            end)
+            noteBtn:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            noteBtn:SetScript("OnClick", function()
+                SC.OpenNoteDialog(capturedKey)
+            end)
+
             visBtn:SetScript("OnClick", function()
                 local db = BrainTaskDB
                 db.hiddenChars = db.hiddenChars or {}

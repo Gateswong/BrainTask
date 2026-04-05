@@ -38,6 +38,7 @@ frame:EnableMouse(true)
 frame:SetToplevel(true)
 frame:SetScript("OnMouseDown", function(self) self:Raise() end)
 frame:Hide()
+tinsert(UISpecialFrames, "BrainTaskDashboard")
 
 -- ── 顶部工具栏 ────────────────────────────────────────────────────────────
 
@@ -799,7 +800,12 @@ local function RefreshLeftColumn(filterText)
         local cb = CreateFrame("Button", nil, row)
         cb:SetSize(16, 16)
         cb:SetPoint("LEFT", row, "LEFT", 8, 0)
-        local cbBg = cb:CreateTexture(nil, "BACKGROUND")
+        local cbBorder = cb:CreateTexture(nil, "BACKGROUND", nil, -8)
+        cbBorder:SetSize(18, 18)
+        cbBorder:SetPoint("CENTER")
+        cbBorder:SetColorTexture(0.65, 0.65, 0.65, 1)
+
+        local cbBg = cb:CreateTexture(nil, "BACKGROUND", nil, -7)
         cbBg:SetAllPoints()
         if completed then
             cbBg:SetColorTexture(0.10, 0.24, 0.10, 1)
@@ -1023,6 +1029,21 @@ local function RefreshRightColumn(filterText)
         cstFS:SetPoint("TOP", nameFS, "BOTTOM", 0, -1)
         cstFS:SetJustifyH("CENTER")
         cstFS:SetText("|cff666666" .. cst.done .. "/" .. cst.enabled .. "|r")
+        -- 角色备注提示
+        cell:EnableMouse(true)
+        cell:SetScript("OnEnter", function(self)
+            local note = BT.Data.GetCharNote(charEntry.key)
+            if note and note ~= "" then
+                GameTooltip:SetOwner(self, "ANCHOR_BOTTOM")
+                GameTooltip:ClearLines()
+                GameTooltip:AddLine(charEntry.info.name or charEntry.key, 1, 1, 1)
+                GameTooltip:AddLine(note, 0.8, 0.8, 0.8, true)
+                GameTooltip:Show()
+            end
+        end)
+        cell:SetScript("OnLeave", function()
+            GameTooltip:Hide()
+        end)
         cell:Show()
         table.insert(charHeadCells, cell)
     end
@@ -1165,7 +1186,12 @@ local function RefreshRightColumn(filterText)
             cell:SetPoint("LEFT", cellParent, "LEFT", cellX, 0)
 
             local cbSize = 13
-            local cellBg = cell:CreateTexture(nil, "BACKGROUND")
+            local cellBorder = cell:CreateTexture(nil, "BACKGROUND", nil, -8)
+            cellBorder:SetSize(cbSize + 2, cbSize + 2)
+            cellBorder:SetPoint("CENTER", cell, "CENTER")
+            cellBorder:SetColorTexture(0.65, 0.65, 0.65, 1)
+
+            local cellBg = cell:CreateTexture(nil, "BACKGROUND", nil, -7)
             cellBg:SetSize(cbSize, cbSize)
             cellBg:SetPoint("CENTER", cell, "CENTER")
 
@@ -1180,12 +1206,15 @@ local function RefreshRightColumn(filterText)
                 local en = todo.enabledChars and todo.enabledChars[charKey]
                 local cp = en and BT.Data.GetCharCompleted(todoID, charKey)
                 if not en then
+                    cellBorder:Hide()
                     cellBg:SetColorTexture(0.15, 0.15, 0.18, 0.3)
                     cellCheck:Hide()
                 elseif cp then
+                    cellBorder:Show()
                     cellBg:SetColorTexture(0.12, 0.28, 0.12, 1)
                     cellCheck:Show()
                 else
+                    cellBorder:Show()
                     cellBg:SetColorTexture(0.18, 0.18, 0.28, 1)
                     cellCheck:Hide()
                 end
@@ -1346,30 +1375,28 @@ local function MakeEditBox(parent, yOffset, w, h, multiLine)
         wrapper:SetBackdropColor(0.10, 0.10, 0.14, 1)
         wrapper:SetBackdropBorderColor(unpack(BT.COLORS.border))
 
-        local scrollFrame = CreateFrame("ScrollFrame", nil, wrapper, "UIPanelScrollFrameTemplate")
-        scrollFrame:SetPoint("TOPLEFT",     wrapper, "TOPLEFT",      3,  -3)
-        scrollFrame:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", -22,  3)
+        local scrollFrame = CreateFrame("ScrollFrame", nil, wrapper, "InputScrollFrameTemplate")
+        scrollFrame:SetPoint("TOPLEFT",     wrapper, "TOPLEFT",     3,  -3)
+        scrollFrame:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", -3,  3)
+        scrollFrame:HookScript("OnSizeChanged", function(self)
+            self.EditBox:SetWidth(self:GetWidth())
+        end)
 
-        local ebWidth = (w or 340) - 3 - 22 - 3
-        local eb = CreateFrame("EditBox", nil, scrollFrame)
-        eb:SetSize(ebWidth, scrollFrame:GetHeight() or 80)
-        eb:SetMultiLine(true)
-        eb:SetFont("Fonts/FRIZQT__.TTF", 11, "")
+        local eb = scrollFrame.EditBox
+        eb:SetMaxLetters(25565)
+        eb:SetFontObject("GameFontNormal")
         eb:SetTextColor(0.9, 0.9, 0.9)
         eb:SetAutoFocus(false)
-        eb:SetMaxLetters(256)
+        eb:EnableMouse(true)
         eb:SetScript("OnTabPressed",      function(self) self:ClearFocus() end)
         eb:SetScript("OnEscapePressed",   function(self) self:ClearFocus() end)
-        eb:SetScript("OnEditFocusGained", function(self) BT.activeLinkEditBox = self end)
-        eb:SetScript("OnEditFocusLost",   function(self)
+        eb:HookScript("OnEditFocusGained", function(self) BT.activeLinkEditBox = self end)
+        eb:HookScript("OnEditFocusLost",   function(self)
             if BT.activeLinkEditBox == self then BT.activeLinkEditBox = nil end
         end)
-        eb:SetScript("OnTextChanged", function(self)
-            local _, fontSize = self:GetFont()
-            local contentH = math.max(1, self:GetNumLines()) * (fontSize + 2) + 10
-            self:SetHeight(math.max(scrollFrame:GetHeight(), contentH))
+        eb:SetScript("OnTextChanged", function(self, userInput)
+            ScrollingEdit_OnTextChanged(self, scrollFrame)
         end)
-        scrollFrame:SetScrollChild(eb)
         return eb
     end
     local eb = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
@@ -1656,6 +1683,17 @@ cancelBtn:SetScript("OnClick", function()
     ResetForm()
 end)
 
+formFrame:EnableKeyboard(true)
+formFrame:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+        self:SetPropagateKeyboardInput(false)
+        self:Hide()
+        ResetForm()
+    else
+        self:SetPropagateKeyboardInput(true)
+    end
+end)
+
 -- ── 删除确认弹窗 ──────────────────────────────────────────────────────────
 
 local confirmFrame = BT.CreateBackdropFrame("Frame", nil, frame, 280, 110)
@@ -1675,6 +1713,16 @@ confirmYes:SetPoint("BOTTOMRIGHT", confirmFrame, "BOTTOM", -4, 10)
 local confirmNo = BT.CreateButton(confirmFrame, BT.L.BTN_CANCEL, 90, 26)
 confirmNo:SetPoint("BOTTOMLEFT", confirmFrame, "BOTTOM", 4, 10)
 confirmNo:SetScript("OnClick", function() confirmFrame:Hide() end)
+
+confirmFrame:EnableKeyboard(true)
+confirmFrame:SetScript("OnKeyDown", function(self, key)
+    if key == "ESCAPE" then
+        self:SetPropagateKeyboardInput(false)
+        self:Hide()
+    else
+        self:SetPropagateKeyboardInput(true)
+    end
+end)
 
 function DB.ConfirmDelete(todoID)
     confirmYes:SetScript("OnClick", function()

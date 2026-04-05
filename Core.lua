@@ -89,6 +89,7 @@ function BT.OnLogin()
     db.floatWindowSize   = db.floatWindowSize   or { w = 280, h = 420 }
     db.floatWindowLocked = db.floatWindowLocked or false
     db.hiddenChars     = db.hiddenChars     or {}
+    db.charNotes       = db.charNotes       or {}
 
     -- 注册当前角色
     local name  = UnitName("player")
