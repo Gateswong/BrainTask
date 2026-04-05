@@ -50,6 +50,9 @@ function Tracking.PollAll()
                                 or (at.encounterIndex and {at.encounterIndex})
                             detected = indices and Tracking.CheckInstanceBoss(at.instanceID, indices) or false
                         end
+
+                    elseif at.type == "currency" then
+                        detected = at.currencyIDs and Tracking.CheckCurrencyIDs(at.currencyIDs) or false
                     end
 
                     if detected then
@@ -100,6 +103,18 @@ function Tracking.CheckEncounterIDs(encounterIDs)
         end
     end
     return false
+end
+
+-- ── Currency ID 检测（所有货币均达周上限时返回 true）──────────────────
+
+function Tracking.CheckCurrencyIDs(currencyIDs)
+    if not currencyIDs or #currencyIDs == 0 then return false end
+    for _, id in ipairs(currencyIDs) do
+        local info = C_CurrencyInfo.GetCurrencyInfo(id)
+        if not info or info.maxWeeklyQuantity <= 0 then return false end
+        if info.quantityEarnedThisWeek < info.maxWeeklyQuantity then return false end
+    end
+    return true
 end
 
 -- ── 旧格式兼容：Instance ID + Encounter Index 数组 ────────────────────

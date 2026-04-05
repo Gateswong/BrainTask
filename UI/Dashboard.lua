@@ -814,7 +814,7 @@ local function RefreshLeftColumn(filterText)
         if not completed then cbCheck:Hide() end
 
         local todoID   = todo.id
-        local autoTracked = todo.autoTrack and (todo.autoTrack.type == "quest" or todo.autoTrack.type == "instance_boss")
+        local autoTracked = todo.autoTrack and (todo.autoTrack.type == "quest" or todo.autoTrack.type == "instance_boss" or todo.autoTrack.type == "currency")
         if not autoTracked then
             cb:SetScript("OnClick", function()
                 local cur = BT.Data.GetWarbandCompleted(todoID)
@@ -833,6 +833,14 @@ local function RefreshLeftColumn(filterText)
                 GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
                 GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
+                if todo.autoTrack.type == "currency" then
+                    for _, cid in ipairs(todo.autoTrack.currencyIDs or {}) do
+                        local info = C_CurrencyInfo.GetCurrencyInfo(cid)
+                        if info then
+                            GameTooltip:AddLine("|T"..info.iconFileID..":14:14:0:0|t "..info.name, 1, 0.82, 0)
+                        end
+                    end
+                end
                 GameTooltip:Show()
             end)
             cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -1184,7 +1192,7 @@ local function RefreshRightColumn(filterText)
             end
             UpdateCell()
 
-            local autoTracked = todo.autoTrack and (todo.autoTrack.type == "quest" or todo.autoTrack.type == "instance_boss")
+            local autoTracked = todo.autoTrack and (todo.autoTrack.type == "quest" or todo.autoTrack.type == "instance_boss" or todo.autoTrack.type == "currency")
             cell:SetScript("OnClick", function()
                 local en = todo.enabledChars and todo.enabledChars[charKey]
                 if IsShiftKeyDown() then
@@ -1202,6 +1210,14 @@ local function RefreshRightColumn(filterText)
                 if en then
                     if autoTracked then
                         GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
+                        if todo.autoTrack.type == "currency" then
+                            for _, cid in ipairs(todo.autoTrack.currencyIDs or {}) do
+                                local info = C_CurrencyInfo.GetCurrencyInfo(cid)
+                                if info then
+                                    GameTooltip:AddLine("|T"..info.iconFileID..":14:14:0:0|t "..info.name, 1, 0.82, 0)
+                                end
+                            end
+                        end
                     else
                         local cp = BT.Data.GetCharCompleted(todoID, charKey)
                         GameTooltip:AddLine(cp and BT.L.TOOLTIP_CLICK_UNDO or BT.L.TOOLTIP_CLICK_DONE, 0.8, 0.8, 0.8)
@@ -1286,7 +1302,7 @@ end)
 
 -- ── 待办事项表单（添加/编辑）弹窗 ───────────────────────────────────────
 
-local formFrame = BT.CreateBackdropFrame("Frame", nil, frame, 380, 460)
+local formFrame = BT.CreateBackdropFrame("Frame", nil, frame, 380, 510)
 formFrame:SetPoint("CENTER", frame, "CENTER", 0, 0)
 formFrame:SetFrameStrata("DIALOG")
 formFrame:EnableMouse(true)
@@ -1322,27 +1338,38 @@ end
 
 local function MakeEditBox(parent, yOffset, w, h, multiLine)
     if multiLine then
-        -- 用外层 Frame 固定尺寸，避免 SetMultiLine 导致高度重置
+        -- 用外层 Frame 固定可视区域
         local wrapper = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-        wrapper:SetSize(w or 340, h or 60)
+        wrapper:SetSize(w or 340, h or 100)
         wrapper:SetPoint("TOPLEFT", parent, "TOPLEFT", 16, yOffset)
         wrapper:SetBackdrop(BT.BACKDROP)
         wrapper:SetBackdropColor(0.10, 0.10, 0.14, 1)
         wrapper:SetBackdropBorderColor(unpack(BT.COLORS.border))
-        local eb = CreateFrame("EditBox", nil, wrapper)
-        eb:SetPoint("TOPLEFT",     wrapper, "TOPLEFT",     5, -5)
-        eb:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", -5,  5)
+
+        local scrollFrame = CreateFrame("ScrollFrame", nil, wrapper, "UIPanelScrollFrameTemplate")
+        scrollFrame:SetPoint("TOPLEFT",     wrapper, "TOPLEFT",      3,  -3)
+        scrollFrame:SetPoint("BOTTOMRIGHT", wrapper, "BOTTOMRIGHT", -22,  3)
+
+        local ebWidth = (w or 340) - 3 - 22 - 3
+        local eb = CreateFrame("EditBox", nil, scrollFrame)
+        eb:SetSize(ebWidth, scrollFrame:GetHeight() or 80)
         eb:SetMultiLine(true)
         eb:SetFont("Fonts/FRIZQT__.TTF", 11, "")
         eb:SetTextColor(0.9, 0.9, 0.9)
         eb:SetAutoFocus(false)
         eb:SetMaxLetters(256)
-        eb:SetScript("OnTabPressed",    function(self) self:ClearFocus() end)
-        eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        eb:SetScript("OnTabPressed",      function(self) self:ClearFocus() end)
+        eb:SetScript("OnEscapePressed",   function(self) self:ClearFocus() end)
         eb:SetScript("OnEditFocusGained", function(self) BT.activeLinkEditBox = self end)
         eb:SetScript("OnEditFocusLost",   function(self)
             if BT.activeLinkEditBox == self then BT.activeLinkEditBox = nil end
         end)
+        eb:SetScript("OnTextChanged", function(self)
+            local _, fontSize = self:GetFont()
+            local contentH = math.max(1, self:GetNumLines()) * (fontSize + 2) + 10
+            self:SetHeight(math.max(scrollFrame:GetHeight(), contentH))
+        end)
+        scrollFrame:SetScrollChild(eb)
         return eb
     end
     local eb = CreateFrame("EditBox", nil, parent, "BackdropTemplate")
@@ -1368,14 +1395,14 @@ local _flTitle   = MakeFieldLabel(formFrame, BT.L.FIELD_TITLE,       -42)
 local fTitle   = MakeEditBox(formFrame, -58, 340, 24)
 
 local _flDetails = MakeFieldLabel(formFrame, BT.L.FIELD_DETAILS,     -92)
-local fDetails = MakeEditBox(formFrame, -108, 340, 50, true)
+local fDetails = MakeEditBox(formFrame, -108, 340, 100, true)
 
-local _flCat     = MakeFieldLabel(formFrame, BT.L.FIELD_CATEGORY,       -170)
+local _flCat     = MakeFieldLabel(formFrame, BT.L.FIELD_CATEGORY,       -220)
 local UpdateSaveBtn  -- forward declaration（须在 RefreshCatDropList 之前声明，以便闭包捕获）
 
 -- 分类下拉（简单按钮实现）
 local catDropBtn = BT.CreateButton(formFrame, BT.L.SELECT_CATEGORY, 200, 24)
-catDropBtn:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16, -186)
+catDropBtn:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16, -236)
 local selectedCatID = nil
 
 local catDropList = CreateFrame("Frame", nil, formFrame)
@@ -1437,7 +1464,7 @@ catDropBtn:SetScript("OnClick", function()
     end
 end)
 
-local _flReset   = MakeFieldLabel(formFrame, BT.L.FIELD_RESET,     -222)
+local _flReset   = MakeFieldLabel(formFrame, BT.L.FIELD_RESET,     -272)
 
 -- 重置类型选择
 local resetTypes = { { id = "none", label = BT.L.RESET_NONE }, { id = "daily", label = BT.L.RESET_DAILY }, { id = "weekly", label = BT.L.RESET_WEEKLY } }
@@ -1446,7 +1473,7 @@ local resetBtns = {}
 
 for i, rt in ipairs(resetTypes) do
     local rb = BT.CreateButton(formFrame, rt.label, 80, 22)
-    rb:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16 + (i - 1) * 88, -238)
+    rb:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16 + (i - 1) * 88, -288)
     local rtID = rt.id
     rb:SetScript("OnClick", function()
         selectedReset = rtID
@@ -1471,16 +1498,16 @@ end
 resetBtns[1].isSelected = true
 resetBtns[1]:SetBackdropColor(0.18, 0.35, 0.55, 1)
 
-local _flTrack   = MakeFieldLabel(formFrame, BT.L.FIELD_AUTO_TRACK,     -272)
+local _flTrack   = MakeFieldLabel(formFrame, BT.L.FIELD_AUTO_TRACK,     -322)
 
 -- 追踪类型选择
-local trackTypes = { { id = "none", label = BT.L.TRACK_NONE }, { id = "quest", label = BT.L.TRACK_QUEST }, { id = "instance_boss", label = BT.L.TRACK_BOSS } }
+local trackTypes = { { id = "none", label = BT.L.TRACK_NONE }, { id = "quest", label = BT.L.TRACK_QUEST }, { id = "instance_boss", label = BT.L.TRACK_BOSS }, { id = "currency", label = BT.L.TRACK_CURRENCY } }
 local selectedTrack = "none"
 local trackBtns = {}
 
 for i, tt in ipairs(trackTypes) do
-    local tb = BT.CreateButton(formFrame, tt.label, 90, 22)
-    tb:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16 + (i - 1) * 98, -288)
+    local tb = BT.CreateButton(formFrame, tt.label, 80, 22)
+    tb:SetPoint("TOPLEFT", formFrame, "TOPLEFT", 16 + (i - 1) * 86, -338)
     local ttID = tt.id
     tb:SetScript("OnClick", function()
         selectedTrack = ttID
@@ -1496,6 +1523,8 @@ for i, tt in ipairs(trackTypes) do
         formFrame.questIDLabel:SetShown(ttID == "quest")
         formFrame.bossEncounterIDBox:SetShown(ttID == "instance_boss")
         formFrame.bossEncounterIDLabel:SetShown(ttID == "instance_boss")
+        formFrame.currencyIDBox:SetShown(ttID == "currency")
+        formFrame.currencyIDLabel:SetShown(ttID == "currency")
     end)
     tb:SetScript("OnLeave", function(self)
         if self.isSelected then
@@ -1521,16 +1550,22 @@ local function parseIDs(text)
 end
 
 -- Quest ID 输入（支持多个逗号分隔）
-formFrame.questIDLabel = MakeFieldLabel(formFrame, BT.L.QUEST_ID_LABEL, -318)
+formFrame.questIDLabel = MakeFieldLabel(formFrame, BT.L.QUEST_ID_LABEL, -368)
 formFrame.questIDLabel:Hide()
-formFrame.questIDBox = MakeEditBox(formFrame, -334, 300, 22)
+formFrame.questIDBox = MakeEditBox(formFrame, -384, 300, 22)
 formFrame.questIDBox:Hide()
 
 -- 副本 Boss：输入 Encounter ID（逗号分隔多个）
-formFrame.bossEncounterIDLabel = MakeFieldLabel(formFrame, BT.L.ENCOUNTER_ID_LABEL, -318)
+formFrame.bossEncounterIDLabel = MakeFieldLabel(formFrame, BT.L.ENCOUNTER_ID_LABEL, -368)
 formFrame.bossEncounterIDLabel:Hide()
-formFrame.bossEncounterIDBox = MakeEditBox(formFrame, -334, 300, 22)
+formFrame.bossEncounterIDBox = MakeEditBox(formFrame, -384, 300, 22)
 formFrame.bossEncounterIDBox:Hide()
+
+-- 货币上限：输入 Currency ID（逗号分隔多个）
+formFrame.currencyIDLabel = MakeFieldLabel(formFrame, BT.L.CURRENCY_ID_LABEL, -368)
+formFrame.currencyIDLabel:Hide()
+formFrame.currencyIDBox = MakeEditBox(formFrame, -384, 300, 22)
+formFrame.currencyIDBox:Hide()
 
 -- 保存按钮
 local formEditingID  = nil
@@ -1553,6 +1588,9 @@ local function ResetForm()
     formFrame.bossEncounterIDBox:SetText("")
     formFrame.bossEncounterIDBox:Hide()
     formFrame.bossEncounterIDLabel:Hide()
+    formFrame.currencyIDBox:SetText("")
+    formFrame.currencyIDBox:Hide()
+    formFrame.currencyIDLabel:Hide()
     formEditingID = nil
     formEditScope = nil
     if UpdateSaveBtn then UpdateSaveBtn() end
@@ -1580,6 +1618,9 @@ saveBtn:SetScript("OnClick", function()
         if #encIDs > 0 then
             autoTrack = { type = "instance_boss", encounterIDs = encIDs }
         end
+    elseif selectedTrack == "currency" then
+        local cids = parseIDs(formFrame.currencyIDBox:GetText())
+        if #cids > 0 then autoTrack = { type = "currency", currencyIDs = cids } end
     end
 
     local opts = {
@@ -1695,6 +1736,11 @@ function DB.OpenTodoForm(scope, editID)
                     formFrame.bossEncounterIDBox:SetText(table.concat(encIDs, ", "))
                     formFrame.bossEncounterIDBox:Show()
                     formFrame.bossEncounterIDLabel:Show()
+                elseif selectedTrack == "currency" then
+                    local cids = todo.autoTrack.currencyIDs or {}
+                    formFrame.currencyIDBox:SetText(table.concat(cids, ", "))
+                    formFrame.currencyIDBox:Show()
+                    formFrame.currencyIDLabel:Show()
                 end
             end
         end
@@ -1725,6 +1771,7 @@ BT.Locale.Register(function()
     _flTrack:SetText(BT.L.FIELD_AUTO_TRACK)
     formFrame.questIDLabel:SetText(BT.L.QUEST_ID_LABEL)
     formFrame.bossEncounterIDLabel:SetText(BT.L.ENCOUNTER_ID_LABEL)
+    formFrame.currencyIDLabel:SetText(BT.L.CURRENCY_ID_LABEL)
     -- 重置类型 / 追踪类型按钮
     resetBtns[1].label:SetText(BT.L.RESET_NONE)
     resetBtns[2].label:SetText(BT.L.RESET_DAILY)
@@ -1732,6 +1779,7 @@ BT.Locale.Register(function()
     trackBtns[1].label:SetText(BT.L.TRACK_NONE)
     trackBtns[2].label:SetText(BT.L.TRACK_QUEST)
     trackBtns[3].label:SetText(BT.L.TRACK_BOSS)
+    trackBtns[4].label:SetText(BT.L.TRACK_CURRENCY)
     -- 表单按钮
     saveBtn.label:SetText(BT.L.BTN_SAVE)
     cancelBtn.label:SetText(BT.L.BTN_CANCEL)

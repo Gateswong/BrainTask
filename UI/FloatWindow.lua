@@ -199,13 +199,29 @@ local function AcquireRow(parent)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             self.rowBg:SetColorTexture(1, 1, 1, 0.04)
+            local showTip = false
             if self.details and self.details ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
                 GameTooltip:AddLine(self.todoTitle or "", 1, 1, 1)
                 GameTooltip:AddLine(self.details, 0.8, 0.8, 0.8, true)
-                GameTooltip:Show()
+                showTip = true
             end
+            if self.autoTrack and self.autoTrack.type == "currency" then
+                if not showTip then
+                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                    GameTooltip:ClearLines()
+                    showTip = true
+                end
+                GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
+                for _, cid in ipairs(self.autoTrack.currencyIDs or {}) do
+                    local info = C_CurrencyInfo.GetCurrencyInfo(cid)
+                    if info then
+                        GameTooltip:AddLine("|T"..info.iconFileID..":14:14:0:0|t "..info.name, 1, 0.82, 0)
+                    end
+                end
+            end
+            if showTip then GameTooltip:Show() end
         end)
         row:SetScript("OnLeave", function(self)
             self.rowBg:SetColorTexture(0, 0, 0, 0)
@@ -224,6 +240,7 @@ local function ReleaseRow(row)
     row.cb:SetScript("OnClick", nil)
     row.details = nil
     row.todoTitle = nil
+    row.autoTrack = nil
     row.resetFS:SetText("")
     table.insert(rowPool, row)
 end
@@ -310,6 +327,7 @@ function FW.Refresh()
         row:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -yOffset)
         row.details   = todo.details
         row.todoTitle = todo.title
+        row.autoTrack = todo.autoTrack
 
         -- 标题文字（完成则加删除线色）
         local scopeTag = todo.scope == "warband" and CreateAtlasMarkup("warbands-icon", 14, 14) .. " " or ""
@@ -334,7 +352,7 @@ function FW.Refresh()
         local scope       = todo.scope
         local ck          = charKey
         local isCompleted = completed
-        local autoTracked = todo.autoTrack and (todo.autoTrack.type == "quest" or todo.autoTrack.type == "instance_boss")
+        local autoTracked = todo.autoTrack and (todo.autoTrack.type == "quest" or todo.autoTrack.type == "instance_boss" or todo.autoTrack.type == "currency")
         if not autoTracked then
             row.cb:SetScript("OnClick", function()
                 if scope == "warband" then
