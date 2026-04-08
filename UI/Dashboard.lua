@@ -1566,14 +1566,31 @@ end
 trackBtns[1].isSelected = true
 trackBtns[1]:SetBackdropColor(0.18, 0.35, 0.55, 1)
 
--- 解析逗号分隔 ID 列表
-local function parseIDs(text)
-    local ids = {}
-    for s in string.gmatch(text or "", "[^,]+") do
-        local n = tonumber(s:match("^%s*(.-)%s*$"))
-        if n then table.insert(ids, n) end
+-- 解析 ID 列表：分号切 AND 组，逗号切组内 OR 项，返回嵌套数组 {{id,...},...}
+local function parseIDGroups(text)
+    local groups = {}
+    for segment in string.gmatch((text or "") .. ";", "([^;]*);") do
+        local group = {}
+        for s in string.gmatch(segment, "[^,]+") do
+            local n = tonumber(s:match("^%s*(.-)%s*$"))
+            if n then table.insert(group, n) end
+        end
+        if #group > 0 then table.insert(groups, group) end
     end
-    return ids
+    return groups
+end
+
+-- 序列化 ID 分组为字符串（兼容旧格式扁平数组）
+local function serializeIDGroups(groups)
+    if not groups or #groups == 0 then return "" end
+    if type(groups[1]) == "number" then
+        return table.concat(groups, ",")
+    end
+    local parts = {}
+    for _, group in ipairs(groups) do
+        table.insert(parts, table.concat(group, ","))
+    end
+    return table.concat(parts, ";")
 end
 
 -- Quest ID 输入（支持多个逗号分隔）
@@ -1638,16 +1655,14 @@ saveBtn:SetScript("OnClick", function()
 
     local autoTrack = nil
     if selectedTrack == "quest" then
-        local ids = parseIDs(formFrame.questIDBox:GetText())
-        if #ids > 0 then autoTrack = { type = "quest", questIDs = ids } end
+        local groups = parseIDGroups(formFrame.questIDBox:GetText())
+        if #groups > 0 then autoTrack = { type = "quest", questIDs = groups } end
     elseif selectedTrack == "instance_boss" then
-        local encIDs = parseIDs(formFrame.bossEncounterIDBox:GetText())
-        if #encIDs > 0 then
-            autoTrack = { type = "instance_boss", encounterIDs = encIDs }
-        end
+        local groups = parseIDGroups(formFrame.bossEncounterIDBox:GetText())
+        if #groups > 0 then autoTrack = { type = "instance_boss", encounterIDs = groups } end
     elseif selectedTrack == "currency" then
-        local cids = parseIDs(formFrame.currencyIDBox:GetText())
-        if #cids > 0 then autoTrack = { type = "currency", currencyIDs = cids } end
+        local groups = parseIDGroups(formFrame.currencyIDBox:GetText())
+        if #groups > 0 then autoTrack = { type = "currency", currencyIDs = groups } end
     end
 
     local opts = {
@@ -1776,17 +1791,17 @@ function DB.OpenTodoForm(scope, editID)
                     local qids = todo.autoTrack.questIDs
                         or (todo.autoTrack.questID and {todo.autoTrack.questID})
                         or {}
-                    formFrame.questIDBox:SetText(table.concat(qids, ", "))
+                    formFrame.questIDBox:SetText(serializeIDGroups(qids))
                     formFrame.questIDBox:Show()
                     formFrame.questIDLabel:Show()
                 elseif selectedTrack == "instance_boss" then
                     local encIDs = todo.autoTrack.encounterIDs or {}
-                    formFrame.bossEncounterIDBox:SetText(table.concat(encIDs, ", "))
+                    formFrame.bossEncounterIDBox:SetText(serializeIDGroups(encIDs))
                     formFrame.bossEncounterIDBox:Show()
                     formFrame.bossEncounterIDLabel:Show()
                 elseif selectedTrack == "currency" then
                     local cids = todo.autoTrack.currencyIDs or {}
-                    formFrame.currencyIDBox:SetText(table.concat(cids, ", "))
+                    formFrame.currencyIDBox:SetText(serializeIDGroups(cids))
                     formFrame.currencyIDBox:Show()
                     formFrame.currencyIDLabel:Show()
                 end

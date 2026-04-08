@@ -71,48 +71,63 @@ end
 -- ── Quest ID 检测（任意一个匹配即为完成）────────────────────────────────
 
 function Tracking.CheckQuestIDs(questIDs)
-    if not questIDs then return false end
-    for _, id in ipairs(questIDs) do
-        if C_QuestLog.IsQuestFlaggedCompleted(id) == true then
-            return true
+    if not questIDs or #questIDs == 0 then return false end
+    local groups = type(questIDs[1]) == "number" and {questIDs} or questIDs
+    for _, group in ipairs(groups) do
+        local ok = false
+        for _, id in ipairs(group) do
+            if C_QuestLog.IsQuestFlaggedCompleted(id) == true then ok = true; break end
         end
+        if not ok then return false end
     end
-    return false
+    return true
 end
 
 -- ── Encounter ID 检测（通过 EJ 名称匹配副本锁，任意一个命中即完成）────
 
 function Tracking.CheckEncounterIDs(encounterIDs)
-    if not encounterIDs then return false end
+    if not encounterIDs or #encounterIDs == 0 then return false end
+    local groups = type(encounterIDs[1]) == "number" and {encounterIDs} or encounterIDs
     local numSaved = GetNumSavedInstances()
-    for _, encID in ipairs(encounterIDs) do
-        local encName = EJ_GetEncounterInfo(encID)
-        if encName then
-            for i = 1, numSaved do
-                local _, _, _, _, locked, _, _, _, _, _, numEncounters =
-                    GetSavedInstanceInfo(i)
-                if locked then
-                    for j = 1, numEncounters do
-                        local bossName, _, isKilled = GetSavedInstanceEncounterInfo(i, j)
-                        if bossName == encName and isKilled then
-                            return true
+    for _, group in ipairs(groups) do
+        local ok = false
+        for _, encID in ipairs(group) do
+            local encName = EJ_GetEncounterInfo(encID)
+            if encName then
+                for i = 1, numSaved do
+                    local _, _, _, _, locked, _, _, _, _, _, numEncounters =
+                        GetSavedInstanceInfo(i)
+                    if locked then
+                        for j = 1, numEncounters do
+                            local bossName, _, isKilled = GetSavedInstanceEncounterInfo(i, j)
+                            if bossName == encName and isKilled then ok = true; break end
                         end
                     end
+                    if ok then break end
                 end
             end
+            if ok then break end
         end
+        if not ok then return false end
     end
-    return false
+    return true
 end
 
 -- ── Currency ID 检测（所有货币均达周上限时返回 true）──────────────────
 
 function Tracking.CheckCurrencyIDs(currencyIDs)
     if not currencyIDs or #currencyIDs == 0 then return false end
-    for _, id in ipairs(currencyIDs) do
-        local info = C_CurrencyInfo.GetCurrencyInfo(id)
-        if not info or info.maxWeeklyQuantity <= 0 then return false end
-        if info.quantityEarnedThisWeek < info.maxWeeklyQuantity then return false end
+    local groups = type(currencyIDs[1]) == "number" and {currencyIDs} or currencyIDs
+    for _, group in ipairs(groups) do
+        local ok = false
+        for _, id in ipairs(group) do
+            local info = C_CurrencyInfo.GetCurrencyInfo(id)
+            if info and info.maxWeeklyQuantity > 0
+               and info.quantityEarnedThisWeek >= info.maxWeeklyQuantity then
+                ok = true; break
+            end
+        end
+        if not ok then return false end
     end
     return true
 end
