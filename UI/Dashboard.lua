@@ -732,7 +732,7 @@ end
 -- ── 自动追踪 Tooltip 共享工具 ──────────────────────────────────────────────
 
 local _atTip = { owner = nil, autoTrack = nil, anchor = nil,
-                 titleLine = nil, detailsLine = nil }
+                 titleLine = nil, detailsLine = nil, resetType = nil }
 
 local function _RebuildAutoTrackTooltip()
     local d = _atTip
@@ -752,7 +752,16 @@ local function _RebuildAutoTrackTooltip()
         GameTooltip:AddLine(" ")
         GameTooltip:AddLine(BT.L.TOOLTIP_PROGRESS_TITLE, 1, 1, 0.6)
         if t == "quest" then
-            for _, group in ipairs(BT.Tracking.GetQuestProgress(d.autoTrack.questIDs)) do
+            local resetAwareSet = d.autoTrack.questIDResetAware
+            local lastResetTime = nil
+            if resetAwareSet and BrainTaskDB then
+                if d.resetType == "weekly" then
+                    lastResetTime = BrainTaskDB.lastWeeklyReset
+                elseif d.resetType == "daily" then
+                    lastResetTime = BrainTaskDB.lastDailyReset
+                end
+            end
+            for _, group in ipairs(BT.Tracking.GetQuestProgress(d.autoTrack.questIDs, resetAwareSet, lastResetTime, BT.charKey)) do
                 local parts = {}
                 for _, item in ipairs(group) do
                     if item.done then
@@ -812,12 +821,13 @@ _atRefreshFrame:SetScript("OnEvent", function()
     end
 end)
 
-function BT.ShowAutoTrackTooltip(owner, autoTrack, anchor, titleLine, detailsLine)
+function BT.ShowAutoTrackTooltip(owner, autoTrack, anchor, titleLine, detailsLine, resetType)
     _atTip.owner       = owner
     _atTip.autoTrack   = autoTrack
     _atTip.anchor      = anchor
     _atTip.titleLine   = titleLine
     _atTip.detailsLine = detailsLine
+    _atTip.resetType   = resetType
     _RebuildAutoTrackTooltip()
 end
 
@@ -933,7 +943,7 @@ local function RefreshLeftColumn(filterText)
             end)
         else
             cb:SetScript("OnEnter", function()
-                BT.ShowAutoTrackTooltip(cb, todo.autoTrack, "ANCHOR_RIGHT")
+                BT.ShowAutoTrackTooltip(cb, todo.autoTrack, "ANCHOR_RIGHT", nil, nil, todo.resetType)
             end)
             cb:SetScript("OnLeave", function() BT.HideAutoTrackTooltip() end)
         end
@@ -1652,29 +1662,49 @@ end
 trackBtns[1].isSelected = true
 trackBtns[1]:SetBackdropColor(0.18, 0.35, 0.55, 1)
 
--- 解析 ID 列表：分号切 AND 组，逗号切组内 OR 项，返回嵌套数组 {{id,...},...}
+-- 解析 ID 列表：分号切 AND 组，逗号切组内 OR 项
+-- ID 末尾加 ! 表示重置感知（如 "123!,456"）
+-- 返回: groups（嵌套数组 {{id,...},...}），resetAwareSet（{[id]=true,...}）
 local function parseIDGroups(text)
     local groups = {}
+    local resetAwareSet = {}
     for segment in string.gmatch((text or "") .. ";", "([^;]*);") do
         local group = {}
         for s in string.gmatch(segment, "[^,]+") do
-            local n = tonumber(s:match("^%s*(.-)%s*$"))
-            if n then table.insert(group, n) end
+            local token = s:match("^%s*(.-)%s*$")
+            local resetAware = token:sub(-1) == "!"
+            if resetAware then token = token:sub(1, -2) end
+            local n = tonumber(token)
+            if n then
+                table.insert(group, n)
+                if resetAware then resetAwareSet[n] = true end
+            end
         end
         if #group > 0 then table.insert(groups, group) end
     end
-    return groups
+    return groups, resetAwareSet
 end
 
 -- 序列化 ID 分组为字符串（兼容旧格式扁平数组）
-local function serializeIDGroups(groups)
+-- resetAwareSet 可选，传入时对应 ID 输出 "id!" 格式
+local function serializeIDGroups(groups, resetAwareSet)
     if not groups or #groups == 0 then return "" end
+    local function idStr(id)
+        if resetAwareSet and resetAwareSet[id] then
+            return tostring(id) .. "!"
+        end
+        return tostring(id)
+    end
     if type(groups[1]) == "number" then
-        return table.concat(groups, ",")
+        local strs = {}
+        for _, id in ipairs(groups) do table.insert(strs, idStr(id)) end
+        return table.concat(strs, ",")
     end
     local parts = {}
     for _, group in ipairs(groups) do
-        table.insert(parts, table.concat(group, ","))
+        local strs = {}
+        for _, id in ipairs(group) do table.insert(strs, idStr(id)) end
+        table.insert(parts, table.concat(strs, ","))
     end
     return table.concat(parts, ";")
 end
@@ -1741,8 +1771,13 @@ saveBtn:SetScript("OnClick", function()
 
     local autoTrack = nil
     if selectedTrack == "quest" then
-        local groups = parseIDGroups(formFrame.questIDBox:GetText())
-        if #groups > 0 then autoTrack = { type = "quest", questIDs = groups } end
+        local groups, resetAwareSet = parseIDGroups(formFrame.questIDBox:GetText())
+        if #groups > 0 then
+            autoTrack = { type = "quest", questIDs = groups }
+            if next(resetAwareSet) then
+                autoTrack.questIDResetAware = resetAwareSet
+            end
+        end
     elseif selectedTrack == "instance_boss" then
         local groups = parseIDGroups(formFrame.bossEncounterIDBox:GetText())
         if #groups > 0 then autoTrack = { type = "instance_boss", encounterIDs = groups } end
@@ -1877,7 +1912,7 @@ function DB.OpenTodoForm(scope, editID)
                     local qids = todo.autoTrack.questIDs
                         or (todo.autoTrack.questID and {todo.autoTrack.questID})
                         or {}
-                    formFrame.questIDBox:SetText(serializeIDGroups(qids))
+                    formFrame.questIDBox:SetText(serializeIDGroups(qids, todo.autoTrack.questIDResetAware))
                     formFrame.questIDBox:Show()
                     formFrame.questIDLabel:Show()
                 elseif selectedTrack == "instance_boss" then

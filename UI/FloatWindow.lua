@@ -244,7 +244,7 @@ local function AcquireRow(parent)
             if self.autoTrack then
                 local tl = (self.details and self.details ~= "") and (self.todoTitle or "") or nil
                 local dl = (self.details and self.details ~= "") and self.details or nil
-                BT.ShowAutoTrackTooltip(self, self.autoTrack, "ANCHOR_RIGHT", tl, dl)
+                BT.ShowAutoTrackTooltip(self, self.autoTrack, "ANCHOR_RIGHT", tl, dl, self.resetType)
             elseif self.details and self.details ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
@@ -260,7 +260,7 @@ local function AcquireRow(parent)
             if self.autoTrack then
                 local tl = (self.details and self.details ~= "") and (self.todoTitle or "") or nil
                 local dl = (self.details and self.details ~= "") and self.details or nil
-                BT.ShowAutoTrackTooltip(self, self.autoTrack, "ANCHOR_RIGHT", tl, dl)
+                BT.ShowAutoTrackTooltip(self, self.autoTrack, "ANCHOR_RIGHT", tl, dl, self.resetType)
             elseif self.details and self.details ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
@@ -287,6 +287,7 @@ local function ReleaseRow(row)
     row.details = nil
     row.todoTitle = nil
     row.autoTrack = nil
+    row.resetType = nil
     row.resetFS:SetText("")
     table.insert(rowPool, row)
 end
@@ -402,6 +403,7 @@ function FW.Refresh()
         row.details   = todo.details
         row.todoTitle = todo.title
         row.autoTrack = todo.autoTrack
+        row.resetType = todo.resetType
 
         -- 标题文字（完成则加删除线色）
         local scopeTag = todo.scope == "warband" and CreateAtlasMarkup("warbands-icon", 14, 14) .. " " or ""

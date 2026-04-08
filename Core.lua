@@ -90,6 +90,8 @@ function BT.OnLogin()
     db.floatWindowLocked = db.floatWindowLocked or false
     db.hiddenChars     = db.hiddenChars     or {}
     db.charNotes       = db.charNotes       or {}
+    db.questCompletedAt = db.questCompletedAt or {}
+    -- 结构: db.questCompletedAt[charKey][questID] = timestamp（首次检测到完成的时间）
 
     -- 注册当前角色
     local name  = UnitName("player")

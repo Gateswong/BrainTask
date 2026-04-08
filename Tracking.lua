@@ -38,7 +38,19 @@ function Tracking.PollAll()
                     if at.type == "quest" then
                         -- 支持新 questIDs 数组和旧 questID 单值
                         local ids = at.questIDs or (at.questID and {at.questID})
-                        detected = ids and Tracking.CheckQuestIDs(ids) or false
+                        if ids then
+                            Tracking.UpdateQuestCache(ids, charKey)
+                            local resetAwareSet = at.questIDResetAware
+                            local lastResetTime = nil
+                            if resetAwareSet then
+                                if todo.resetType == "weekly" then
+                                    lastResetTime = BrainTaskDB.lastWeeklyReset
+                                elseif todo.resetType == "daily" then
+                                    lastResetTime = BrainTaskDB.lastDailyReset
+                                end
+                            end
+                            detected = Tracking.CheckQuestIDs(ids, resetAwareSet, lastResetTime, charKey)
+                        end
 
                     elseif at.type == "instance_boss" then
                         -- 新格式：encounterIDs（EJ Encounter ID 数组）
@@ -68,15 +80,52 @@ function Tracking.PollAll()
     end
 end
 
--- ── Quest ID 检测（任意一个匹配即为完成）────────────────────────────────
+-- ── Quest 完成时间缓存 ─────────────────────────────────────────────────────
+-- 扫描 questIDs 中所有 ID，若 WoW 标记为已完成且缓存中尚无记录，写入当前时间戳。
+-- 须在 CheckQuestIDs 之前调用，保证首次检测到完成时即记录时间。
+function Tracking.UpdateQuestCache(questIDs, charKey)
+    if not questIDs or #questIDs == 0 then return end
+    local db = BrainTaskDB
+    if not db then return end
+    db.questCompletedAt = db.questCompletedAt or {}
+    db.questCompletedAt[charKey] = db.questCompletedAt[charKey] or {}
+    local cache = db.questCompletedAt[charKey]
+    local groups = type(questIDs[1]) == "number" and {questIDs} or questIDs
+    local now = time()
+    for _, group in ipairs(groups) do
+        for _, id in ipairs(group) do
+            if cache[id] == nil and C_QuestLog.IsQuestFlaggedCompleted(id) == true then
+                cache[id] = now
+            end
+        end
+    end
+end
 
-function Tracking.CheckQuestIDs(questIDs)
+-- ── Quest ID 检测（任意一个匹配即为完成）────────────────────────────────
+-- resetAwareSet: 需重置感知的 quest ID 表 {[id]=true,...}（可为 nil）
+-- lastResetTime: 上次重置的时间戳（可为 nil，为 nil 时退化为普通检测）
+-- charKey:       当前角色 key，用于读取完成时间缓存（可为 nil）
+function Tracking.CheckQuestIDs(questIDs, resetAwareSet, lastResetTime, charKey)
     if not questIDs or #questIDs == 0 then return false end
     local groups = type(questIDs[1]) == "number" and {questIDs} or questIDs
+    local cache = (resetAwareSet and charKey and lastResetTime and lastResetTime > 0
+        and BrainTaskDB and BrainTaskDB.questCompletedAt
+        and BrainTaskDB.questCompletedAt[charKey]) or nil
     for _, group in ipairs(groups) do
         local ok = false
         for _, id in ipairs(group) do
-            if C_QuestLog.IsQuestFlaggedCompleted(id) == true then ok = true; break end
+            if C_QuestLog.IsQuestFlaggedCompleted(id) == true then
+                if cache and resetAwareSet[id] then
+                    -- 重置感知：仅当首次检测时间在上次重置之后才视为完成
+                    local completedAt = cache[id]
+                    if completedAt and completedAt >= lastResetTime then
+                        ok = true; break
+                    end
+                    -- completedAt < lastResetTime：本轮周期内未完成，继续检查同组其他 ID
+                else
+                    ok = true; break
+                end
+            end
         end
         if not ok then return false end
     end
@@ -176,15 +225,24 @@ local function GetQuestName(id)
 end
 
 -- 返回 quest 进度：{{ {name, done}, ... }, ...}，每个子数组为一个 AND 组
-function Tracking.GetQuestProgress(questIDs)
+-- resetAwareSet/lastResetTime/charKey 可选，传入时对 ! ID 做重置感知判断
+function Tracking.GetQuestProgress(questIDs, resetAwareSet, lastResetTime, charKey)
     if not questIDs or #questIDs == 0 then return {} end
     local groups = type(questIDs[1]) == "number" and {questIDs} or questIDs
+    local cache = (resetAwareSet and charKey and lastResetTime and lastResetTime > 0
+        and BrainTaskDB and BrainTaskDB.questCompletedAt
+        and BrainTaskDB.questCompletedAt[charKey]) or nil
     local result = {}
     for _, group in ipairs(groups) do
         local line = {}
         for _, id in ipairs(group) do
             local name = GetQuestName(id)
-            local done = C_QuestLog.IsQuestFlaggedCompleted(id) == true
+            local flagged = C_QuestLog.IsQuestFlaggedCompleted(id) == true
+            local done = flagged
+            if flagged and cache and resetAwareSet[id] then
+                local completedAt = cache[id]
+                done = completedAt and completedAt >= lastResetTime or false
+            end
             table.insert(line, { name = name, done = done })
         end
         table.insert(result, line)
