@@ -241,7 +241,11 @@ local function AcquireRow(parent)
         end)
         row:SetScript("OnHyperlinkLeave", function(self)
             GameTooltip:Hide()
-            if self.details and self.details ~= "" then
+            if self.autoTrack then
+                local tl = (self.details and self.details ~= "") and (self.todoTitle or "") or nil
+                local dl = (self.details and self.details ~= "") and self.details or nil
+                BT.ShowAutoTrackTooltip(self, self.autoTrack, "ANCHOR_RIGHT", tl, dl)
+            elseif self.details and self.details ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
                 GameTooltip:AddLine(self.todoTitle or "", 1, 1, 1)
@@ -253,33 +257,21 @@ local function AcquireRow(parent)
         row:EnableMouse(true)
         row:SetScript("OnEnter", function(self)
             self.rowBg:SetColorTexture(1, 1, 1, 0.04)
-            local showTip = false
-            if self.details and self.details ~= "" then
+            if self.autoTrack then
+                local tl = (self.details and self.details ~= "") and (self.todoTitle or "") or nil
+                local dl = (self.details and self.details ~= "") and self.details or nil
+                BT.ShowAutoTrackTooltip(self, self.autoTrack, "ANCHOR_RIGHT", tl, dl)
+            elseif self.details and self.details ~= "" then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:ClearLines()
                 GameTooltip:AddLine(self.todoTitle or "", 1, 1, 1)
                 GameTooltip:AddLine(self.details, 0.8, 0.8, 0.8, true)
-                showTip = true
+                GameTooltip:Show()
             end
-            if self.autoTrack and self.autoTrack.type == "currency" then
-                if not showTip then
-                    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                    GameTooltip:ClearLines()
-                    showTip = true
-                end
-                GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
-                for _, cid in ipairs(self.autoTrack.currencyIDs or {}) do
-                    local info = C_CurrencyInfo.GetCurrencyInfo(cid)
-                    if info then
-                        GameTooltip:AddLine("|T"..info.iconFileID..":14:14:0:0|t "..info.name, 1, 0.82, 0)
-                    end
-                end
-            end
-            if showTip then GameTooltip:Show() end
         end)
         row:SetScript("OnLeave", function(self)
             self.rowBg:SetColorTexture(0, 0, 0, 0)
-            GameTooltip:Hide()
+            BT.HideAutoTrackTooltip()
         end)
     else
         row:SetParent(parent)

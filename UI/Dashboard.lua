@@ -729,6 +729,103 @@ end
 
 -- ── 动态渲染：左列（战团事项）────────────────────────────────────────────
 
+-- ── 自动追踪 Tooltip 共享工具 ──────────────────────────────────────────────
+
+local _atTip = { owner = nil, autoTrack = nil, anchor = nil,
+                 titleLine = nil, detailsLine = nil }
+
+local function _RebuildAutoTrackTooltip()
+    local d = _atTip
+    if not d.owner or not d.autoTrack then return end
+    GameTooltip:SetOwner(d.owner, d.anchor or "ANCHOR_RIGHT")
+    GameTooltip:ClearLines()
+    if d.titleLine then
+        GameTooltip:AddLine(d.titleLine, 1, 1, 1)
+    end
+    if d.detailsLine then
+        GameTooltip:AddLine(d.detailsLine, 0.8, 0.8, 0.8, true)
+    end
+    GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
+
+    local t = d.autoTrack.type
+    if IsShiftKeyDown() then
+        GameTooltip:AddLine(" ")
+        GameTooltip:AddLine(BT.L.TOOLTIP_PROGRESS_TITLE, 1, 1, 0.6)
+        if t == "quest" then
+            for _, group in ipairs(BT.Tracking.GetQuestProgress(d.autoTrack.questIDs)) do
+                local parts = {}
+                for _, item in ipairs(group) do
+                    if item.done then
+                        table.insert(parts, "[" .. item.name .. "]|cff00cc00（" .. BT.L.TOOLTIP_QUEST_DONE .. "）|r")
+                    else
+                        table.insert(parts, "[" .. item.name .. "]")
+                    end
+                end
+                GameTooltip:AddLine("  " .. table.concat(parts, " "), 1, 1, 1)
+            end
+        elseif t == "instance_boss" then
+            for _, group in ipairs(BT.Tracking.GetEncounterProgress(d.autoTrack.encounterIDs)) do
+                local parts = {}
+                for _, item in ipairs(group) do
+                    if item.done then
+                        table.insert(parts, "[" .. item.name .. "]|cff00cc00（" .. BT.L.TOOLTIP_QUEST_DONE .. "）|r")
+                    else
+                        table.insert(parts, "[" .. item.name .. "]")
+                    end
+                end
+                GameTooltip:AddLine("  " .. table.concat(parts, " "), 1, 1, 1)
+            end
+        elseif t == "currency" then
+            for _, item in ipairs(BT.Tracking.GetCurrencyProgress(d.autoTrack.currencyIDs)) do
+                local nameStr = "|T" .. item.icon .. ":14:14:0:0|t " .. item.name
+                local statusStr, r, g, b
+                if item.atCap then
+                    statusStr = " (" .. item.current .. "/" .. item.max .. ")"
+                    r, g, b = 0, 0.8, 0
+                elseif item.groupSatisfied then
+                    statusStr = " (" .. BT.L.TOOLTIP_GROUP_SATISFIED .. ")"
+                    r, g, b = 0.55, 0.55, 0.55
+                else
+                    statusStr = " (" .. item.current .. "/" .. item.max .. ")"
+                    r, g, b = 1, 1, 1
+                end
+                GameTooltip:AddLine("  " .. nameStr .. statusStr, r, g, b)
+            end
+        end
+    else
+        if t == "currency" then
+            for _, item in ipairs(BT.Tracking.GetCurrencyProgress(d.autoTrack.currencyIDs)) do
+                GameTooltip:AddLine("|T" .. item.icon .. ":14:14:0:0|t " .. item.name, 1, 0.82, 0)
+            end
+        end
+        GameTooltip:AddLine(BT.L.TOOLTIP_SHIFT_HINT, 0.5, 0.5, 0.5)
+    end
+    GameTooltip:Show()
+end
+
+local _atRefreshFrame = CreateFrame("Frame")
+_atRefreshFrame:RegisterEvent("MODIFIER_STATE_CHANGED")
+_atRefreshFrame:SetScript("OnEvent", function()
+    if _atTip.owner and GameTooltip:IsVisible()
+       and GameTooltip:GetOwner() == _atTip.owner then
+        _RebuildAutoTrackTooltip()
+    end
+end)
+
+function BT.ShowAutoTrackTooltip(owner, autoTrack, anchor, titleLine, detailsLine)
+    _atTip.owner       = owner
+    _atTip.autoTrack   = autoTrack
+    _atTip.anchor      = anchor
+    _atTip.titleLine   = titleLine
+    _atTip.detailsLine = detailsLine
+    _RebuildAutoTrackTooltip()
+end
+
+function BT.HideAutoTrackTooltip()
+    _atTip.owner = nil
+    GameTooltip:Hide()
+end
+
 local leftRows = {}
 
 local function ClearLeftRows()
@@ -836,20 +933,9 @@ local function RefreshLeftColumn(filterText)
             end)
         else
             cb:SetScript("OnEnter", function()
-                GameTooltip:SetOwner(cb, "ANCHOR_RIGHT")
-                GameTooltip:ClearLines()
-                GameTooltip:AddLine(BT.L.TOOLTIP_AUTO_TRACK, 0.8, 0.8, 0.8, true)
-                if todo.autoTrack.type == "currency" then
-                    for _, cid in ipairs(todo.autoTrack.currencyIDs or {}) do
-                        local info = C_CurrencyInfo.GetCurrencyInfo(cid)
-                        if info then
-                            GameTooltip:AddLine("|T"..info.iconFileID..":14:14:0:0|t "..info.name, 1, 0.82, 0)
-                        end
-                    end
-                end
-                GameTooltip:Show()
+                BT.ShowAutoTrackTooltip(cb, todo.autoTrack, "ANCHOR_RIGHT")
             end)
-            cb:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            cb:SetScript("OnLeave", function() BT.HideAutoTrackTooltip() end)
         end
 
         -- 标题
